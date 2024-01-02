@@ -11,14 +11,15 @@ end
 ## MinHash
 The MinHash algorithm is used in tools such as [Mash](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0997-x) and [sourmash](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6720031/) to quickly compute approximate similarities of genomes, collections of genomes, or collections of reads.
 
-```jldoctest; filter = r"^\d\d\d? MB/s$" => s"***"
+```jldoctest; filter = r"^\d+ MB/s$" => s"***"
 using BioSequences, MinHash, FASTX, Kmers
 
-# Write 100 MB of DNA in 50 genomes to buffer
+# Write 25 sequences of length 20 to a buffer.
+# Try changing this to length 4 million!
 buffer = IOBuffer()
 writer = FASTAWriter(buffer)
-n_bytes = sum(1:50) do genome
-    rec = FASTARecord("seq_$(genome)", randdnaseq(2_000_000))
+n_bytes = sum(1:25) do genome
+    rec = FASTARecord("seq_$(genome)", randdnaseq(20))
     write(writer, rec)
 end
 flush(writer)
