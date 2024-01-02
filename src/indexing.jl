@@ -21,12 +21,12 @@ end
     T = derive_type(Kmer{A, K})
     N = nsize(T)
     # After the shift, the first coding element may be unused
-    new_data = if N > length(data)
+    new_data = if N < length(data)
         tail(data)
     else
         data
     end
-    T(unsafe, new_data)
+    T(unsafe, (first(new_data) & get_mask(T), tail(new_data)...))
 end
 
 # Same as above: This needs to be able to inline if the indices are known statically
