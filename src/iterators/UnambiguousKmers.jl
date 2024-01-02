@@ -13,14 +13,14 @@ and `UnambiguousRNAMers{K}(s)`.
 by `UnambiguousKmers`.
 
 # Examples:
-```
+```jldoctest
 julia> it = UnambiguousRNAMers{4}(dna"TGAGCWKCATC");
 
 julia> collect(it)
-3-element Vector{Kmer{RNAAlphabet{2}, 4, 1}}:
- UGAG
- GAGC
- CAUC
+3-element Vector{Tuple{Kmer{RNAAlphabet{2}, 4, 1}, Int64}}:
+ (UGAG, 1)
+ (GAGC, 2)
+ (CAUC, 8)
 ```
 """
 struct UnambiguousKmers{A <: TwoBit, K, S}

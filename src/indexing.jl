@@ -10,16 +10,23 @@ end
 # This is usually type unstable, but in user code, users may use constant-folded ranges,
 # e.g. f(x) = x[2:4]. In this case, we need it to compile to very efficient code.
 # Hence, it MUST use @inline
-@inline function Base.getindex(kmer::Kmer{A}, range::AbstractRange{<:Integer}) where {A}
+@inline function Base.getindex(kmer::Kmer{A}, range::AbstractUnitRange{<:Integer}) where {A}
     @boundscheck checkbounds(kmer, range)
-    T = derive_type(Kmer{A, length(range)})
-    data = zero_tuple(T)
-    nbits = BioSequences.bits_per_symbol(A())
-    for i in range
-        (_, data) =
-            leftshift_carry(data, nbits, BioSequences.extract_encoded_element(kmer, i))
+    K = length(range)
+    iszero(K) && return Kmer{A, 0, 0}(unsafe, ())
+    (i1, _) = BioSequences.bitindex(kmer, first(range))
+    (i2, o2) = BioSequences.bitindex(kmer, last(range))
+    data = kmer.data[i1:i2]
+    (_, data) = rightshift_carry(data, o2, zero(UInt))
+    T = derive_type(Kmer{A, K})
+    N = nsize(T)
+    # After the shift, the first coding element may be unused
+    new_data = if N > length(data)
+        tail(data)
+    else
+        data
     end
-    T(unsafe, data)
+    T(unsafe, new_data)
 end
 
 # Same as above: This needs to be able to inline if the indices are known statically
@@ -52,7 +59,7 @@ function Base.getindex(kmer::Kmer{A}, indices::AbstractVector{<:Integer}) where 
     T(unsafe, data)
 end
 
-@inline function BioSequences.bitindex(kmer::Kmer, i::Unsigned)::Tuple{UInt, UInt}
+@inline function BioSequences.bitindex(kmer::Kmer, i::Integer)::Tuple{UInt, UInt}
     bps = BioSequences.bits_per_symbol(kmer) % UInt
     bpe = (8 * sizeof(UInt)) % UInt
     (i, o) = divrem((UInt(i) - UInt(1) + n_unused(typeof(kmer))) * bps, bpe)
