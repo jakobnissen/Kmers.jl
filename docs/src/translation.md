@@ -17,7 +17,7 @@ CLI
 ```
 
 Since `Kmer`s are immutable, the in-place `translate!` function is not implemented for `Kmers`.
-Also, remember that `Kmer`s are only efficient when short (at most a few hundred symbols). Hence, entire exons or genes should probably be represented by `LongSequence` or `LongSubSeq`.
+Also, remember that `Kmer`s are only efficient when short (at most a few hundred symbols). Hence, entire exons or genes should probably not ever be represented by a `Kmer`, but rather as a `LongSequence` or `LongSubSeq` from BioSequences.jl.
 
 ### Reverse translation
 Kmers.jl implements reverse translation, in which an amino acid sequence is translated to an RNA sequence.

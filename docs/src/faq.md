@@ -20,7 +20,7 @@ In fact, this is implemented by a manually thrown `MethodError`; the generic cas
 
 The reason for this is the consequence of the following limitations:
 * `isequal(x, y)` implies `hash(x) == hash(y)`
-* `isqual(x, y)` and `x == y` ought to be identical for well-defined elements (i.e. in the absence of `missing`s and `NaN`s etc.)
+* `isequal(x, y)` and `x == y` ought to be identical for well-defined elements (i.e. in the absence of `missing`s and `NaN`s etc.)
 * `hash(::Kmer)` must be absolutely maximally efficient
 
 If kmers were to be comparable to `BioSequence`, then the hashing of `BioSequence` should follow `Kmer`, which practically speaking would mean that all biosequences would need to be recoded to `Kmer`s before hashing.
