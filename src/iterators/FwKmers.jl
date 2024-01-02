@@ -63,7 +63,7 @@ end
 @inline function iterate_kmer(
     R::AsciiEncode,
     it::FwKmers{A, K, S},
-) where {A <: Alphabet, K, S <: Bytes}
+) where {A <: Alphabet, K, S}
     src = used_source(RecodingScheme(A(), S), it.seq)
     Base.require_one_based_indexing(src)
     length(src) < K && return nothing

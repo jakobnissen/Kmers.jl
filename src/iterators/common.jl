@@ -26,13 +26,10 @@ Get the type of the data source that kmers are extracted from
 """
 function source_type end
 
-function used_source(R::RecodingScheme, s)
-    if R isa AsciiEncode && s isa Union{String, SubString{String}}
-        codeunits(s)
-    else
-        s
-    end
+function used_source(::AsciiEncode, s::AbstractString)
+    is_ascii(typeof(s)) ? codeunits(s) : s
 end
+used_source(::RecodingScheme, s) = s
 
 @noinline throw_bad_byte_error(b::UInt8) =
     error("Cannot interpret byte $(repr(b)) as nucleotide")

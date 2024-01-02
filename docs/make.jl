@@ -18,6 +18,7 @@ makedocs(;
         "Translation" => "translation.md",
         "Hashing" => "hashing.md",
         "FAQ" => "faq.md",
+        "Cookbook" => ["MinHash" => "minhash.md", "Kmer composition" => "composition.md"],
     ],
     authors="Jakob Nybo Nissen, Sabrina J. Ward, The BioJulia Organisation and other contributors.",
     checkdocs=:exports,

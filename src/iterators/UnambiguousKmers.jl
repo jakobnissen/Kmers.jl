@@ -1,5 +1,5 @@
 """
-    UnambiguousKmers{A <: TwoBit, K, S} <: AbstractKmerIterator{A, K}
+    UnambiguousKmers{A <: TwoBit, K, S}
 
 Iterator of 2-bit nucleic acid kmers. This differs from `FwKmers` in that any kmers
 containing ambiguous nucleotides are skipped, whereas using `FwKmers`, they result
@@ -23,11 +23,15 @@ julia> collect(it)
  CAUC
 ```
 """
-struct UnambiguousKmers{A <: TwoBit, K, S} <: AbstractKmerIterator{A, K}
+struct UnambiguousKmers{A <: TwoBit, K, S}
     it::FwKmers{A, K, S}
 end
 
 Base.IteratorSize(::Type{<:UnambiguousKmers}) = Base.SizeUnknown()
+function Base.eltype(::Type{<:UnambiguousKmers{A, K}}) where {A, K}
+    Tuple{derive_type(Kmer{A, K}), Int}
+end
+
 source_type(::Type{UnambiguousKmers{A, K, S}}) where {A, K, S} = S
 
 # Constructors
@@ -45,7 +49,8 @@ const UnambiguousDNAMers{K, S} = UnambiguousKmers{DNAAlphabet{2}, K, S}
 const UnambiguousRNAMers{K, S} = UnambiguousKmers{RNAAlphabet{2}, K, S}
 
 @inline function Base.iterate(it::UnambiguousKmers{A, K, S}) where {A, K, S}
-    state = (eltype(it)(unsafe, zero_tuple(eltype(it))), K, 1)
+    T = derive_type(Kmer{A, K})
+    state = (T(unsafe, zero_tuple(T)), K, 1)
     iterate_kmer(RecodingScheme(A(), S), it, state)
 end
 
@@ -59,18 +64,19 @@ end
     state::Tuple{Kmer, Int, Int},
 )
     (kmer, remaining, index) = state
+    K = ksize(kmer)
     while !iszero(remaining)
         index > lastindex(it.it.seq) && return nothing
-        symbol = convert(eltype(kmer), it.it.seq[index])
+        symbol = convert(typeof(kmer), it.it.seq[index])
         index += 1
         if isambiguous(symbol)
-            remaining = ksize(eltype(it))
+            remaining = K
         else
             remaining -= 1
             kmer = shift(kmer, symbol)
         end
     end
-    (kmer, (kmer, 1, index))
+    ((kmer, index - K), (kmer, 1, index))
 end
 
 # Here, we can forward directly to FwKmers
@@ -80,7 +86,13 @@ end
     state::Tuple{Kmer, Int, Int},
 )
     (kmer, _, index) = state
-    iterate(it.it, (kmer, index))
+    itval = iterate(it.it, (kmer, index))
+    if itval === nothing
+        nothing
+    else
+        (kmer, s) = itval
+        ((kmer, index - ksize(kmer)), s)
+    end
 end
 
 @inline function iterate_kmer(
@@ -97,7 +109,7 @@ end
         index += 1
         encoding = @inbounds ASCII_SKIPPING_LUT[(byte + 0x01) % Int]
         if encoding == 0xff
-            throw(BioSequences.EncodeError(Alphabet(eltype(it)), repr(byte)))
+            throw(BioSequences.EncodeError(Alphabet(kmer), repr(byte)))
         elseif encoding == 0xf0
             remaining = K
         else
@@ -105,7 +117,7 @@ end
             kmer = shift_encoding(kmer, encoding % UInt)
         end
     end
-    (kmer, (kmer, 1, index))
+    ((kmer, index - K), (kmer, 1, index))
 end
 
 @inline function iterate_kmer(
@@ -121,5 +133,5 @@ end
         index += 1
         remaining = isone(count_ones(encoding)) ? remaining - 1 : K
     end
-    (kmer, (kmer, 1, index))
+    ((kmer, index - K), (kmer, 1, index))
 end

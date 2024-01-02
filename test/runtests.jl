@@ -568,18 +568,9 @@ end
     end
 end
 
-# include("construction_and_conversion.jl")
-# include("comparisons.jl")
-# include("length.jl")
-# include("access.jl")
-# include("random.jl")
-# include("find.jl")
-# include("print.jl")
-# include("transformations.jl")
-# include("mismatches.jl")
-# include("debruijn_neighbors.jl")
-# include("iteration.jl")
-# include("translation.jl")
-#include("shuffle.jl")
+# FwRvIterator
+# Canonical
+# UnambiguousKmers
+# SpacedKmers
 
 end # module

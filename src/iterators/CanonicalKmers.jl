@@ -60,7 +60,7 @@ end
 @inline function iterate_kmer(
     R::AsciiEncode,
     it::FwRvIterator{A, K, S},
-) where {A <: NucleicAcidAlphabet, K, S <: Bytes}
+) where {A <: NucleicAcidAlphabet, K, S}
     src = used_source(RecodingScheme(A(), S), it.seq)
     Base.require_one_based_indexing(src)
     length(src) < K && return nothing
@@ -169,7 +169,7 @@ end
 end
 
 """
-    CanonicalKmers{A <: NucleicAcidAlphabet, K, S}
+    CanonicalKmers{A <: NucleicAcidAlphabet, K, S} <: AbstractKmerIterator{A, K}
 
 Iterator of canonical nucleic acid kmers. The result of this iterator is equivalent
 to calling `canonical` on each value of a `FwKmers` iterator, but may be more

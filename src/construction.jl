@@ -22,6 +22,18 @@ struct AsciiEncode <: RecodingScheme end
 conversion to the right encoding"
 struct GenericRecoding <: RecodingScheme end
 
+"""
+    is_ascii(::Type{T})::Bool
+
+Trait function. Should return `true` for `AbstractVector{UInt8}`, or for
+string types for which `codeunits(s)` returns an `AbstractVector{UInt8}`, where
+every ASCII byte in the string is perserved in the vector.
+This is true for all UTF8, latin1 and ASCII encoded string types.
+"""
+is_ascii(::Type) = false
+is_ascii(::Type{<:Union{String, SubString{String}}}) = true
+is_ascii(::Type{<:AbstractVector{UInt8}}) = true
+
 function RecodingScheme(A::Alphabet, source_type::Type)::RecodingScheme
     return if source_type <: BioSequence
         if BioSequences.encoded_data_eltype(source_type) <: BitInteger
@@ -42,7 +54,7 @@ function RecodingScheme(A::Alphabet, source_type::Type)::RecodingScheme
         else
             GenericRecoding()
         end
-    elseif source_type <: Bytes && BioSequences.codetype(A) isa BioSequences.AsciiAlphabet
+    elseif is_ascii(source_type) && BioSequences.codetype(A) isa BioSequences.AsciiAlphabet
         AsciiEncode()
     else
         GenericRecoding()
