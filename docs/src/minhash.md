@@ -28,7 +28,7 @@ flush(writer)
 timing = @timed FASTAReader(seekstart(buffer); copy=false) do reader
     map(reader) do record
         seq = codeunits(sequence(record))
-        minhash(fx_hash, CanonicalDNAMers{16}(sequence(record)), 1000)
+        sketch(fx_hash, CanonicalDNAMers{16}(sequence(record)), 1000)
     end
 end
 println(round(Int, n_bytes / (timing.time * 1e6)), " MB/s")
