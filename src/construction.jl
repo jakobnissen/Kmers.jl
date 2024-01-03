@@ -77,7 +77,10 @@ function unsafe_extract end
 ) where {T <: Kmer}
     data = zero_tuple(T)
     for i in 1:ksize(T)
-        encoding = left_shift(UInt(1), UInt(BioSequences.extract_encoded_element(seq, i)))
+        encoding = left_shift(
+            UInt(1),
+            UInt(BioSequences.extract_encoded_element(seq, i + from_index - 1)),
+        )
         (_, data) = leftshift_carry(data, 4, encoding)
     end
     T(unsafe, data)
@@ -91,7 +94,7 @@ end
 ) where {T <: Kmer}
     data = zero_tuple(T)
     for i in 1:ksize(T)
-        encoding = UInt(BioSequences.extract_encoded_element(seq, i))::UInt
+        encoding = UInt(BioSequences.extract_encoded_element(seq, i + from_index - 1))::UInt
         if count_ones(encoding) != 1
             throw(
                 BioSequences.EncodeError(
@@ -113,8 +116,8 @@ end
 ) where {T <: Kmer}
     data = zero_tuple(T)
     bps = BioSequences.bits_per_symbol(Alphabet(seq))
-    for i in from_index:(from_index + ksize(T) - 1)
-        encoding = UInt(BioSequences.extract_encoded_element(seq, i))::UInt
+    for i in 1:ksize(T)
+        encoding = UInt(BioSequences.extract_encoded_element(seq, from_index + i - 1))::UInt
         (_, data) = leftshift_carry(data, bps, encoding)
     end
     T(unsafe, data)
@@ -128,8 +131,8 @@ end
 ) where {T <: Kmer}
     data = zero_tuple(T)
     bps = BioSequences.bits_per_symbol(Alphabet(T))
-    @inbounds for i in from_index:(from_index + ksize(T) - 1)
-        byte = seq[i]
+    @inbounds for i in 1:ksize(T)
+        byte = seq[from_index + i - 1]
         encoding = BioSequences.ascii_encode(Alphabet(T), byte)
         if encoding > 0x7f
             throw(BioSequences.EncodeError(Alphabet(T), byte))
