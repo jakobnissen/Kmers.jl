@@ -178,6 +178,7 @@ RNAKmer
 AAKmer
 DNACodon
 RNACodon
+Base.Integer(::Kmer)
 pop
 pop_first
 push

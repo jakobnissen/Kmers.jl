@@ -257,7 +257,7 @@ fx_hash(x) = fx_hash(x, zero(UInt))
 Create a new kmer which is the concatenation of `kmer` and `s`.
 Returns a `K+1`-mer.
 
-!!! warn
+!!! warning
     Since the output of this function is a `K+1`-mer, use of this function
     in a loop may result in type-instability.
 
@@ -329,7 +329,7 @@ Create a new kmer which is the concatenation of `s` and `kmer`.
 Returns a `K+1`-mer. Similar to [`push`](@ref), but places the new symbol `s`
 at the front.
 
-!!! warn
+!!! warning
     Since the output of this function is a `K+1`-mer, use of this function
     in a loop may result in type-instability.
 
@@ -398,7 +398,7 @@ end
 Returns a new kmer with the last symbol of the input `kmer` removed.
 Throws an `ArgumentError` if `kmer` is empty.
 
-!!! warn
+!!! warning
     Since the output of this function is a `K-1`-mer, use of this function
     in a loop may result in type-instability.
 
@@ -438,7 +438,7 @@ end
 Returns a new kmer with the first symbol of the input `kmer` removed.
 Throws an `ArgumentError` if `kmer` is empty.
 
-!!! warn
+!!! warning
     Since the output of this function is a `K-1`-mer, use of this function
     in a loop may result in type-instability.
 
@@ -477,4 +477,72 @@ end
 # in the UInt tuple
 @inline function get_mask(T::Type{<:Kmer})
     UInt(1) << (8 * sizeof(UInt) - bits_unused(T)) - 1
+end
+
+"""
+    Integer(x::Kmer)::Unsigned
+
+Return an integer representation of `Kmer` `x`.
+The returned value is a value of one of the types `UInt8`, `UInt16`, `UInt32`, `UInt64`, or `UInt128`,
+and the smallest type that can represent `x` is picked.
+This function is type stable (since the return type only depends on the input kmer type) and highly efficient.
+
+Every kmer is guaranteed to map uniquely to an integer, such that `Integer(x) == Integer(y)` holds
+if and only if `x === y`.
+
+If `x` needs more than 128 bits to represent, throw an `InexactError`.
+
+!!! warning
+    The returned type is guaranteed to remain stable across minor Kmers.jl releases,
+    but the returned value may change.
+
+# Examples
+```jldoctest
+julia> Integer(mer""a)
+0x00
+
+julia> Integer(mer"UGCUAGC"r)
+0x39c9
+
+julia> Integer(mer"KQPLYMWDLEREVLS"a)
+0x030a060106130a0f000b050e0a120c11
+
+julia> Integer(DNAKmer{100}(randdnaseq(100)))
+ERROR: InexactError:
+[...]
+```
+"""
+function Base.Integer(x::Kmer)
+    bits = BioSequences.bits_per_symbol(x) * ksize(typeof(x))
+    data = x.data
+    is_32bit = Sys.WORD_SIZE == 32
+    return if bits == 0
+        0x00
+    elseif bits ≤ 8
+        only(data) % UInt8
+    elseif bits ≤ 16
+        only(data) % UInt16
+    elseif bits ≤ 32
+        only(data) % UInt32
+    elseif bits ≤ 64
+        if is_32bit
+            (last(data) % UInt64) << 32 | first(data)
+        else
+            only(data)
+        end
+    elseif bits ≤ 128
+        if is_32bit
+            result = (
+                (data[3] % UInt128) << 64 | (data[2] % UInt128) << 32 | (data[1] % UInt128)
+            )
+            if bits > 96
+                result |= (data[4] % UInt128) << 96
+            end
+            result
+        else
+            (last(data) % UInt128) << 64 | first(data)
+        end
+    else
+        throw(InexactError(:Integer, Integer, x))
+    end
 end
