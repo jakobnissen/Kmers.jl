@@ -11,6 +11,7 @@ using StringViews
 const SEED = 0xccfb2d5055d8c990
 
 include("utils.jl")
+include("translation.jl")
 
 @testset "BioSequences Interface" begin
     for A in
