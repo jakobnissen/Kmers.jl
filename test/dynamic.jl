@@ -736,6 +736,11 @@ end
         s_rna_4bit = LongSequence{RNAAlphabet{4}}(rna"UAGCUGAW")  # W = A or U
         m_rna_4bit = Oligomer{RNAAlphabet{4}, UInt64}(s_rna_4bit)
         @test complement(m_rna_4bit) == Oligomer{RNAAlphabet{4}, UInt64}(complement(s_rna_4bit))
+
+        # Test generic fallback with a nonstandard nucleic-acid alphabet.
+        generic = Oligomer{GenericNucAlphabet, UInt64}(dna"TAGC")
+        @test complement(generic) == Oligomer{GenericNucAlphabet, UInt64}(dna"ATCG")
+        @test complement(empty(generic)) == empty(generic)
     end
 
     @testset "Reverse complement" begin
@@ -763,6 +768,10 @@ end
         s_large = dna"TAGCTAGCTAGCTAGCTAGC"
         m_large = DNAOligomer{UInt512}(s_large)
         @test reverse_complement(m_large) == DNAOligomer{UInt512}(reverse_complement(s_large))
+
+        generic = Oligomer{GenericNucAlphabet, UInt64}(dna"TAGC")
+        @test reverse_complement(generic) == Oligomer{GenericNucAlphabet, UInt64}(dna"GCTA")
+        @test reverse_complement(empty(generic)) == empty(generic)
     end
 
     @testset "Canonical" begin
@@ -778,6 +787,10 @@ end
         m_large = DNAOligomer{UInt256}(dna"TAGCTAGCTAGC")
         m_rc = reverse_complement(m_large)
         @test canonical(m_large) == min(m_large, m_rc)
+
+        generic = Oligomer{GenericNucAlphabet, UInt64}(dna"TAGC")
+        @test canonical(generic) == reverse_complement(generic)
+        @test canonical(empty(generic)) == empty(generic)
     end
 end
 

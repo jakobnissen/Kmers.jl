@@ -346,6 +346,12 @@ function BioSequences.complement(x::Oligomer{<:Union{DNAAlphabet{4}, RNAAlphabet
     return _new_dynamic_kmer(A, u | (x.x & length_mask(typeof(x))))
 end
 
+# Generic fallback for nonstandard nucleic-acid alphabets. The specialized
+# two-bit and four-bit methods above avoid decoding and re-encoding.
+function BioSequences.complement(x::Oligomer{<:NucleicAcidAlphabet})
+    return typeof(x)((complement(i) for i in x))
+end
+
 function Base.reverse(x::Oligomer{A}) where {A}
     Bps = BioSequences.BitsPerSymbol(A())
     u = BioSequences.reversebits(x.x, Bps)
