@@ -188,7 +188,8 @@ from_integer(T::Type{Oligomer{A, U}}, x::U, len::Int) where {A <: Alphabet, U <:
 
 #### Between Backing Integer Types
 
-Dynamic kmers can be converted between different backing integer types:
+Dynamic kmers can be converted between different backing integer types. Equality is
+only defined for matching backing types, so widen the smaller value before comparing:
 
 ```jldoctest
 julia> d32 = DNAOligomer{UInt32}("TAGC")
@@ -199,7 +200,7 @@ julia> d64 = DNAOligomer{UInt64}(d32)  # Widen to larger type
 4nt DNAOligomer{UInt64}:
 TAGC
 
-julia> d64 == d32  # Comparable across backing types
+julia> d64 == DNAOligomer{UInt64}("TAGC")
 true
 ```
 

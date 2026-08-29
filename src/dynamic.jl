@@ -184,69 +184,57 @@ end
 const HASH_MASK = 0x6ff6e9f0462d5162 % UInt
 
 Base.copy(x::Oligomer) = x
-Base.hash(x::Oligomer, h::UInt64) = hash(x.x, h ⊻ HASH_MASK) % UInt
-fx_hash(x::Oligomer, h::UInt64) = ((bitrotate(h, 5) ⊻ x.x) % UInt) * FX_CONSTANT
+Base.hash(x::Oligomer, h::UInt) = hash(x.x, h ⊻ HASH_MASK)
+fx_hash(x::Oligomer, h::UInt) = ((bitrotate(h, 5) ⊻ x.x) % UInt) * FX_CONSTANT
 
-Base.:(==)(a::Oligomer{A, U}, b::Oligomer{A, U}) where {A, U} = a === b
+Base.:(==)(a::Oligomer{A, U}, b::Oligomer{A, U}) where {A <: Alphabet, U <: Unsigned} = a === b
 
-# This is similar to Base.promote, except we use it internally only in this package
-# for dynamic kmers. We use it to compare dynamic kmers with compatible alphabets,
-# which may differ in alphabet or encoded data eltype.
-Base.@constprop :aggressive Base.@assume_effects :foldable function promote_dynamic(
-        a::Oligomer{A, U1},
-        b::Oligomer{A, U2},
-    ) where {A <: Alphabet, U1, U2}
-    return if U1 == U2
-        (a, b)
-    elseif sizeof(U1) < sizeof(U2)
-        u = widen_to(U2, a)
-        a = _new_dynamic_kmer(A, u)
-        (a, b)
-    else
-        u = widen_to(U1, b)
-        b = _new_dynamic_kmer(A, u)
-        (a, b)
-    end
+function Base.:(==)(
+        a::Oligomer{<:NucleicAcidAlphabet{N}, U},
+        b::Oligomer{<:NucleicAcidAlphabet{N}, U},
+    ) where {N, U <: Unsigned}
+    return a.x == b.x
 end
 
-# Same as above, but complicated by the fact that they do not share alphabet.
-Base.@constprop :aggressive Base.@assume_effects :foldable function promote_dynamic(
-        a::Oligomer{<:NucleicAcidAlphabet{N}, U1},
-        b::Oligomer{<:NucleicAcidAlphabet{N}, U2}
-    ) where {N, U1, U2}
-    return if U1 == U2
-        b = _new_dynamic_kmer(typeof(Alphabet(a)), b.x)
-        (a, b)
-    elseif sizeof(U1) < sizeof(U2)
-        u = widen_to(U2, a)
-        a = _new_dynamic_kmer(typeof(Alphabet(b)), u)
-        (a, b)
-    else
-        u = widen_to(U1, b)
-        b = _new_dynamic_kmer(typeof(Alphabet(a)), u)
-        (a, b)
-    end
-end
+# Oligomers are compared only when their backing representations are compatible.
+# Comparing another Oligomer or BioSequence would otherwise fall back to decoded
+# BioSymbol comparison, which cannot share this type's representation-based hash.
+Base.:(==)(a::Oligomer, b::Oligomer) = throw(MethodError(==, (a, b)))
+Base.:(==)(a::Oligomer, b::BioSequence) = throw(MethodError(==, (a, b)))
+Base.:(==)(a::BioSequence, b::Oligomer) = throw(MethodError(==, (a, b)))
 
-function Base.:(==)(a::Oligomer{A, U1}, b::Oligomer{A, U2}) where {A, U1, U2}
-    (a, b) = promote_dynamic(a, b)
-    return a === b
-end
+# These resolve the intersection with Kmer's corresponding BioSequence fallbacks.
+Base.:(==)(a::Oligomer, b::Kmer) = throw(MethodError(==, (a, b)))
+Base.:(==)(a::Kmer, b::Oligomer) = throw(MethodError(==, (a, b)))
 
-function Base.:(==)(a::Oligomer{<:NucleicAcidAlphabet{N}, U1}, b::Oligomer{<:NucleicAcidAlphabet{N}, U2}) where {N, U1, U2}
-    (a, b) = promote_dynamic(a, b)
-    return a === b
-end
-
-function Base.isless(a::Oligomer, b::Oligomer)
-    (a, b) = promote_dynamic(a, b)
+function Base.isless(
+        a::Oligomer{A, U}, b::Oligomer{A, U}
+    ) where {A <: Alphabet, U <: Unsigned}
     return isless(a.x, b.x)
 end
 
-function Base.cmp(a::Oligomer, b::Oligomer)
-    (a, b) = promote_dynamic(a, b)
+function Base.cmp(
+        a::Oligomer{A, U}, b::Oligomer{A, U}
+    ) where {A <: Alphabet, U <: Unsigned}
     return cmp(a.x, b.x)
 end
+
+function Base.isless(
+        a::Oligomer{<:NucleicAcidAlphabet{N}, U},
+        b::Oligomer{<:NucleicAcidAlphabet{N}, U},
+    ) where {N, U <: Unsigned}
+    return isless(a.x, b.x)
+end
+
+function Base.cmp(
+        a::Oligomer{<:NucleicAcidAlphabet{N}, U},
+        b::Oligomer{<:NucleicAcidAlphabet{N}, U},
+    ) where {N, U <: Unsigned}
+    return cmp(a.x, b.x)
+end
+
+Base.isless(a::Oligomer, b::Oligomer) = throw(MethodError(isless, (a, b)))
+Base.cmp(a::Oligomer, b::Oligomer) = throw(MethodError(cmp, (a, b)))
 
 @inline function Base.getindex(x::Oligomer{A}, idx::AbstractUnitRange{<:Integer}) where {A}
     isempty(idx) && return empty(typeof(x))

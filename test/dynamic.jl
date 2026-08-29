@@ -18,7 +18,7 @@ using BitIntegers
             for i in (s, string(s), (i for i in s))
                 m = Oligomer{typeof(Alphabet(s)), UInt64}(i)
                 @test length(m) == length(i)
-                @test m == s
+                @test string(m) == string(s)
             end
         end
 
@@ -54,7 +54,7 @@ using BitIntegers
                     src = LongSequence{A{srcB}}(s)
                     dst = Oligomer{A{dstB}, UInt64}(src)
 
-                    @test src == dst
+                    @test string(src) == string(dst)
                 end
             end
         end
@@ -64,7 +64,7 @@ using BitIntegers
         for s in [dna"TAGCTGAC", dna"ATGCTA", dna""]
             for A in [DNAAlphabet{2}, RNAAlphabet{2}]
                 m = Oligomer{A, UInt64}(LongSequence{DNAAlphabet{4}}(s))
-                @test m == LongSequence{A}(s)
+                @test string(m) == string(LongSequence{A}(s))
             end
         end
     end
@@ -81,7 +81,7 @@ using BitIntegers
         for s in [dna"TAGCTA", rna"UGCUGA", aa"PLKWM"]
             kmer = Kmer{typeof(Alphabet(s)), length(s)}(s)
             dkmer = Oligomer{typeof(Alphabet(s)), UInt64}(kmer)
-            @test dkmer == s
+            @test string(dkmer) == string(s)
             @test length(dkmer) == length(kmer)
         end
     end
@@ -117,16 +117,18 @@ using BitIntegers
         # Different backing type, same alphabet - widening
         d32 = DNAOligomer{UInt32}(dna"TAGC")
         d64 = DNAOligomer{UInt64}(d32)
-        @test d64 == d32
+        @test_throws MethodError d64 == d32
+        @test_throws MethodError d32 == d64
         @test length(d64) == length(d32)
-        @test d64 == dna"TAGC"
+        @test string(d64) == "TAGC"
 
         # Different backing type, same alphabet - narrowing
         d128 = DNAOligomer{UInt128}(dna"TAGC")
         d32_narrow = DNAOligomer{UInt32}(d128)
-        @test d32_narrow == d128
+        @test_throws MethodError d32_narrow == d128
+        @test_throws MethodError d128 == d32_narrow
         @test length(d32_narrow) == length(d128)
-        @test d32_narrow == dna"TAGC"
+        @test string(d32_narrow) == "TAGC"
 
         # Same alphabet family (DNA/RNA), different alphabets
         d_dna = dmer"ATGTCGTTAGT"d
@@ -137,29 +139,30 @@ using BitIntegers
         # Different backing type AND different alphabet
         d_dna32 = DNAOligomer{UInt32}(dna"TAGC")
         d_rna64 = RNAOligomer{UInt64}(d_dna32)
-        @test d_rna64 == d_dna32
+        @test_throws MethodError d_rna64 == d_dna32
+        @test_throws MethodError d_dna32 == d_rna64
         @test length(d_rna64) == length(d_dna32)
 
         # Test with amino acids
         aa_d64 = dmer"KWOP"a
         aa_d128 = AAOligomer{UInt128}(aa_d64)
-        @test aa_d128 == aa_d64
+        @test_throws MethodError aa_d128 == aa_d64
         @test length(aa_d128) == length(aa_d64)
         aa_d256 = AAOligomer{UInt256}(aa_d64)
-        @test aa_d256 == aa_d64
+        @test_throws MethodError aa_d256 == aa_d64
         @test length(aa_d256) == length(aa_d64)
 
         # Test with empty kmers
         empty_d32 = DNAOligomer{UInt32}(dna"")
         empty_d64 = DNAOligomer{UInt64}(empty_d32)
-        @test empty_d64 == empty_d32
+        @test_throws MethodError empty_d64 == empty_d32
         @test length(empty_d64) == 0
 
         # Test with 4-bit alphabets
         s_4bit = LongSequence{DNAAlphabet{4}}(dna"TAGCN")
         d_4bit_32 = Oligomer{DNAAlphabet{4}, UInt32}(s_4bit)
         d_4bit_64 = Oligomer{DNAAlphabet{4}, UInt64}(d_4bit_32)
-        @test d_4bit_64 == d_4bit_32
+        @test_throws MethodError d_4bit_64 == d_4bit_32
         @test length(d_4bit_64) == length(d_4bit_32)
 
         # Narrowing must compare symbol capacities, not coding bits with symbols.
@@ -171,14 +174,14 @@ using BitIntegers
             narrowed = target(original)
             @test string(narrowed) == string(original)
             @test length(narrowed) == length(original)
-            @test narrowed == original
+            @test_throws MethodError narrowed == original
             @test_throws Exception target(source(overflowing))
         end
 
         # AAOligomer{UInt8} has capacity zero, exercising the smallest target
         # backing type too.
         empty_aa = AAOligomer{UInt16}(aa"")
-        @test AAOligomer{UInt8}(empty_aa) == empty_aa
+        @test_throws MethodError AAOligomer{UInt8}(empty_aa) == empty_aa
         @test_throws Exception AAOligomer{UInt8}(AAOligomer{UInt16}(aa"K"))
     end
 
@@ -189,6 +192,7 @@ using BitIntegers
             @test length(kmer) == length(dkmer)
             @test string(dkmer) == string(kmer)
             @test_throws MethodError kmer == dkmer
+            @test_throws MethodError dkmer == kmer
         end
     end
 
@@ -290,7 +294,7 @@ end
         @test cmp(dmer"TAGA"d, dmer"TAG"d) > 0
     end
 
-    @testset "Comparison across different integer types" begin
+    @testset "Comparison rejects different backing types" begin
         s1 = dna"TAG"
         s2 = dna"TAC"
         s3 = dna"TAGA"
@@ -300,25 +304,20 @@ end
         m32_2 = DNAOligomer{UInt32}(s2)
         m64_2 = DNAOligomer{UInt64}(s2)
 
-        # Test equality across types
-        @test m32_1 == m64_1
-        @test m32_2 == m64_2
-        @test m32_1 != m64_2
+        for (a, b) in [(m32_1, m64_1), (m32_2, m64_2)]
+            @test_throws MethodError a == b
+            @test_throws MethodError b == a
+            @test_throws MethodError isequal(a, b)
+            @test_throws MethodError a < b
+            @test_throws MethodError cmp(a, b)
+        end
 
-        # Test ordering across types
-        @test m32_2 < m64_1  # TAC < TAG
-        @test m64_1 > m32_2  # TAG > TAC
-
-        # Test cmp across types
-        @test cmp(m32_1, m64_1) == 0
-        @test cmp(m32_2, m64_1) < 0
-        @test cmp(m64_1, m32_2) > 0
-
-        # Test with different lengths
+        # Different lengths do not make the backing types comparable.
         m32_3 = DNAOligomer{UInt32}(s3)
         @test m32_1 < m32_3
-        @test m64_1 < m32_3
         @test cmp(m32_1, m32_3) < 0
+        @test_throws MethodError m64_1 < m32_3
+        @test_throws MethodError cmp(m64_1, m32_3)
 
         # Also for AA types
         s1 = aa"KPRCRLF"
@@ -329,12 +328,11 @@ end
         m128_2 = AAOligomer{UInt128}(s2)
         m256_1 = AAOligomer{UInt256}(s1)
 
-        @test m64_1 == m128_1
-        @test cmp(m64_1, m128_1) == 0
-        @test m128_1 != m128_2
+        @test_throws MethodError m64_1 == m128_1
+        @test_throws MethodError cmp(m64_1, m128_1)
         @test m128_1 < m128_2
-        @test m64_1 == m256_1
-        @test cmp(m256_1, m128_1) == 0
+        @test_throws MethodError m64_1 == m256_1
+        @test_throws MethodError cmp(m256_1, m128_1)
     end
 end
 
@@ -416,20 +414,20 @@ end
         m3 = dmer"TAC"d
 
         # Same kmers should produce same fx_hash
-        @test Kmers.fx_hash(m1, UInt64(0)) == Kmers.fx_hash(m2, UInt64(0))
+        @test Kmers.fx_hash(m1, UInt(0)) == Kmers.fx_hash(m2, UInt(0))
 
         # Different kmers should produce different fx_hash values
-        @test Kmers.fx_hash(m1, UInt64(0)) != Kmers.fx_hash(m3, UInt64(0))
+        @test Kmers.fx_hash(m1, UInt(0)) != Kmers.fx_hash(m3, UInt(0))
 
         # Different seeds should produce different hashes
-        @test Kmers.fx_hash(m1, UInt64(123)) != Kmers.fx_hash(m1, UInt64(456))
+        @test Kmers.fx_hash(m1, UInt(123)) != Kmers.fx_hash(m1, UInt(456))
 
         # Length must be part of hash: TCA and TC have identical coding bits
         # (since A encodes to 00, which looks like padding), but different lengths.
         # They must hash differently despite having the same as_integer representation.
         m1 = dmer"TCA"d
         m2 = dmer"TC"d
-        @test Kmers.fx_hash(m1, UInt64(0)) != Kmers.fx_hash(m2, UInt64(0))
+        @test Kmers.fx_hash(m1, UInt(0)) != Kmers.fx_hash(m2, UInt(0))
     end
 end
 
@@ -595,7 +593,9 @@ end
     for U in [UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, UInt512]
         s = dna"TAG"
         m = Oligomer{DNAAlphabet{2}, U}(s)
-        @test m == s
+        @test string(m) == string(s)
+        @test_throws MethodError m == s
+        @test_throws MethodError s == m
         @test length(m) == 3
     end
 end
@@ -619,8 +619,8 @@ end
             longseq = LongSequence{typeof(Alphabet(dkmer))}(dkmer)
             longseq_fn(longseq, symbol)
 
-            # Test equality
-            @test result_dkmer == longseq
+            # Test content against the LongSequence reference.
+            @test string(result_dkmer) == string(longseq)
             @test length(result_dkmer) == length(longseq)
             @test length(result_dkmer) == length(dkmer) + 1
 
@@ -706,8 +706,8 @@ end
             longseq = LongSequence{typeof(Alphabet(dkmer))}(dkmer)
             longseq_fn(longseq)
 
-            # Test equality
-            @test result_dkmer == longseq
+            # Test content against the LongSequence reference.
+            @test string(result_dkmer) == string(longseq)
             @test length(result_dkmer) == length(longseq)
             @test length(result_dkmer) == length(dkmer) - 1
 
@@ -811,18 +811,18 @@ end
     # Basic translation - 2-bit alphabets
     @testset "Basic 2-bit" begin
         # DNA 2-bit with different backing types
-        @test translate(dmer"ATGTAA"d) == dmer"M*"a
-        @test translate(DNAOligomer{UInt32}(dna"ATGTAA")) == dmer"M*"a
-        @test translate(DNAOligomer{UInt64}(dna"ATGTAA")) == dmer"M*"a
+        @test string(translate(dmer"ATGTAA"d)) == "M*"
+        @test string(translate(DNAOligomer{UInt32}(dna"ATGTAA"))) == "M*"
+        @test string(translate(DNAOligomer{UInt64}(dna"ATGTAA"))) == "M*"
 
         # RNA 2-bit with different backing types
-        @test translate(dmer"AUGUAA"r) == dmer"M*"a
-        @test translate(RNAOligomer{UInt32}(rna"AUGUAA")) == dmer"M*"a
-        @test translate(RNAOligomer{UInt64}(rna"AUGUAA")) == dmer"M*"a
+        @test string(translate(dmer"AUGUAA"r)) == "M*"
+        @test string(translate(RNAOligomer{UInt32}(rna"AUGUAA"))) == "M*"
+        @test string(translate(RNAOligomer{UInt64}(rna"AUGUAA"))) == "M*"
 
         # Longer sequences
-        @test translate(dmer"TCTACACCCTAG"d) == dmer"STP*"a
-        @test translate(dmer"UCUACACCCUAG"r) == dmer"STP*"a
+        @test string(translate(dmer"TCTACACCCTAG"d)) == "STP*"
+        @test string(translate(dmer"UCUACACCCUAG"r)) == "STP*"
         s = randdnaseq(249)
         t = translate(DNAOligomer{UInt512}(s))
         @test LongSequence(t) == translate(s)
@@ -832,21 +832,21 @@ end
     @testset "Basic 4-bit" begin
         # DNA 4-bit with different backing types
         d = Oligomer{DNAAlphabet{4}, UInt64}(dna"TGGCCCGATTGA")
-        @test translate(d) == dmer"WPD*"a
+        @test string(translate(d)) == "WPD*"
 
         # UInt128 works with 4-bit since capacity is smaller
         d128 = Oligomer{DNAAlphabet{4}, UInt128}(dna"ATGTAA")
-        @test translate(d128) == dmer"M*"a
+        @test string(translate(d128)) == "M*"
 
         # RNA 4-bit with different backing types
         r = Oligomer{RNAAlphabet{4}, UInt64}(rna"UGGCCCGAUUGA")
-        @test translate(r) == dmer"WPD*"a
+        @test string(translate(r)) == "WPD*"
 
         r32 = Oligomer{RNAAlphabet{4}, UInt32}(rna"AUGUAA")
-        @test translate(r32) == dmer"M*"a
+        @test string(translate(r32)) == "M*"
 
         r128 = Oligomer{RNAAlphabet{4}, UInt128}(rna"AUGUAA")
-        @test translate(r128) == dmer"M*"a
+        @test string(translate(r128)) == "M*"
 
         # Long sequence
         s = randdnaseq(252)
@@ -858,36 +858,36 @@ end
     @testset "Different genetic codes" begin
         # Vertebrate mitochondrial code: AGA and AGG are stop codons
         vert_mito = BioSequences.vertebrate_mitochondrial_genetic_code
-        @test translate(dmer"ATGAGA"d; code = vert_mito) == dmer"M*"a  # AGA is stop
+        @test string(translate(dmer"ATGAGA"d; code = vert_mito)) == "M*"  # AGA is stop
 
         # Standard code: AGA and AGG code for R (Arginine)
-        @test translate(dmer"ATGAGA"d) == dmer"MR"a
-        @test translate(dmer"ATGAGG"d) == dmer"MR"a
+        @test string(translate(dmer"ATGAGA"d)) == "MR"
+        @test string(translate(dmer"ATGAGG"d)) == "MR"
 
         # Test with different backing types
-        @test translate(DNAOligomer{UInt64}(dna"ATGAGA"); code = vert_mito) == dmer"M*"a
-        @test translate(RNAOligomer{UInt32}(rna"AUGAGA"); code = vert_mito) == dmer"M*"a
+        @test string(translate(DNAOligomer{UInt64}(dna"ATGAGA"); code = vert_mito)) == "M*"
+        @test string(translate(RNAOligomer{UInt32}(rna"AUGAGA"); code = vert_mito)) == "M*"
 
         # Test with 4-bit alphabets
-        @test translate(Oligomer{DNAAlphabet{4}, UInt64}(dna"ATGAGA"); code = vert_mito) == dmer"M*"a
+        @test string(translate(Oligomer{DNAAlphabet{4}, UInt64}(dna"ATGAGA"); code = vert_mito)) == "M*"
     end
 
     # alternative_start flag
     @testset "alternative_start" begin
         # Without alternative_start: TTG codes for L (Leucine)
-        @test translate(dmer"TTGCCC"d; alternative_start = false) == dmer"LP"a
-        @test translate(dmer"UUGCCC"r; alternative_start = false) == dmer"LP"a
+        @test string(translate(dmer"TTGCCC"d; alternative_start = false)) == "LP"
+        @test string(translate(dmer"UUGCCC"r; alternative_start = false)) == "LP"
 
         # With alternative_start: first codon becomes M regardless
-        @test translate(dmer"TTGCCC"d; alternative_start = true) == dmer"MP"a
-        @test translate(dmer"UUGCCC"r; alternative_start = true) == dmer"MP"a
+        @test string(translate(dmer"TTGCCC"d; alternative_start = true)) == "MP"
+        @test string(translate(dmer"UUGCCC"r; alternative_start = true)) == "MP"
     end
 
     # Ambiguous codons (only for 4-bit alphabets)
     @testset "Ambiguous codons" begin
         # With allow_ambiguous_codons=true (default), ambiguous codons translate
         d_ambig = Oligomer{DNAAlphabet{4}, UInt128}("AAAACWGCSWTARACADA")
-        @test translate(d_ambig) == dmer"KTAJBX"a
+        @test string(translate(d_ambig)) == "KTAJBX"
 
         # With allow_ambiguous_codons=false, ambiguous codons throw
         @test_throws Exception translate(d_ambig; allow_ambiguous_codons = false)
@@ -929,10 +929,10 @@ end
         @test_throws ErrorException translate(RNAOligomer{UInt1024}(rna""))
 
         # Not an overflow - 512 bits fit
-        @test translate(RNAOligomer{UInt512}(rna"")) == dmer""a
+        @test string(translate(RNAOligomer{UInt512}(rna""))) == ""
 
         # 4-bit nucleotides do not overflow even when 1024 bits
-        @test translate(Oligomer{RNAAlphabet{4}, UInt1024}(rna"AUG")) == dmer"M"a
+        @test string(translate(Oligomer{RNAAlphabet{4}, UInt1024}(rna"AUG"))) == "M"
     end
 
     # Edge cases

@@ -27,6 +27,34 @@ include("translation.jl")
     end
 end
 
+@testset "Oligomer comparison" begin
+    dna8 = DNAOligomer{UInt8}("TAG")
+    dna8_copy = DNAOligomer{UInt8}("TAG")
+    rna8 = RNAOligomer{UInt8}("UAG")
+    dna16 = DNAOligomer{UInt16}("TAG")
+    dna4_16 = Oligomer{DNAAlphabet{4}, UInt16}("TAG")
+    long = LongDNA{2}("TAG")
+    kmer = DNAKmer{3}("TAG")
+
+    @test dna8 == dna8_copy
+    @test dna8 == rna8
+    @test hash(dna8) == hash(dna8_copy)
+    @test hash(dna8) == hash(rna8)
+
+    for (a, b) in [(dna8, dna16), (dna16, dna4_16)]
+        @test_throws MethodError a == b
+        @test_throws MethodError b == a
+        @test_throws MethodError isequal(a, b)
+        @test_throws MethodError a < b
+        @test_throws MethodError cmp(a, b)
+    end
+
+    for (a, b) in [(dna8, long), (dna8, kmer)]
+        @test_throws MethodError a == b
+        @test_throws MethodError b == a
+    end
+end
+
 struct CharSymbol <: BioSymbol
     x::Char
 end
