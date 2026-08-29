@@ -178,6 +178,14 @@ julia> d[2:4]
 3nt DNAOligomer{UInt64}:
 AGC
 
+julia> d[[6, 2, 2, 1]]
+4nt DNAOligomer{UInt64}:
+TAAT
+
+julia> d[[true, false, true, false, false, true]]
+3nt DNAOligomer{UInt64}:
+TGT
+
 julia> Base.setindex(d, 'G', 2)  # Immutable, returns new kmer
 6nt DNAOligomer{UInt64}:
 TGGCAT

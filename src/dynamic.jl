@@ -273,13 +273,64 @@ end
 widen_bitint(T::Union{Type{UInt8}, Type{UInt16}, Type{UInt32}, Type{UInt64}}) = widen(T)
 
 @inline function Base.getindex(x::Oligomer{A}, idx::AbstractUnitRange{<:Integer}) where {A}
+    @boundscheck if isempty(idx)
+        i = first(idx)
+        if i < firstindex(x) || (i > lastindex(x) && i - one(i) != lastindex(x))
+            boundserror(x, idx)
+        end
+    else
+        checkbounds(x, first(idx))
+        checkbounds(x, last(idx))
+    end
     isempty(idx) && return empty(typeof(x))
-    @boundscheck checkbounds(x, idx)
     bps = BioSequences.bits_per_symbol(x)
     len = length(idx)
     u = left_shift(x.x, (first(idx) - 1) * bps)
     U = BioSequences.encoded_data_eltype(typeof(x))
     u &= top_mask(U, len * bps)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
+@inline function Base.getindex(
+        x::Oligomer{A, U}, indices::AbstractVector{Bool}
+    ) where {A, U <: Unsigned}
+    @boundscheck checkbounds(x, indices)
+    bps = BioSequences.bits_per_symbol(x)
+    source = x.x
+    u = zero(U)
+    len = 0
+    for selected in indices
+        if selected
+            len += 1
+            encoding = if iszero(bps)
+                zero(U)
+            else
+                right_shift(source, 8 * sizeof(U) - bps)
+            end
+            u = left_shift(u, bps) | encoding
+        end
+        source = left_shift(source, bps)
+    end
+    u = left_shift(u, 8 * sizeof(U) - len * bps)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
+function Base.getindex(
+        x::Oligomer{A, U}, indices::AbstractVector{<:Integer}
+    ) where {A, U <: Unsigned}
+    len = length(indices)
+    if len > capacity(typeof(x))
+        boundserror(x, indices)
+    end
+    bps = BioSequences.bits_per_symbol(x)
+    shift = 8 * sizeof(U)
+    u = zero(U)
+    for i in indices
+        @boundscheck checkbounds(x, i)
+        shift -= bps
+        encoding = BioSequences.extract_encoded_element(x, i) % U
+        u |= left_shift(encoding, shift)
+    end
     return _new_dynamic_kmer(A, u | (len % U))
 end
 

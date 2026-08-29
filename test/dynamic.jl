@@ -278,9 +278,55 @@ end
         @test m[2:5] == dmer"AGCT"d
         @test m[6:8] == dmer"GAC"d
         @test m[1:0] == dmer""d
+        @test m[9:8] == dmer""d
 
         @test_throws BoundsError m[0:3]
         @test_throws BoundsError m[6:9]
+        @test_throws BoundsError m[0:-1]
+        @test_throws BoundsError m[10:9]
+
+        empty_mer = dmer""d
+        @test @inferred(empty_mer[1:0]) === empty_mer
+        @test_throws BoundsError empty_mer[0:-1]
+        @test_throws BoundsError empty_mer[2:1]
+    end
+
+    @testset "Integer-vector indexing" begin
+        m = dmer"TAGCTGAC"d
+        @test @inferred(m[[1, 3, 5]]) == dmer"TGT"d
+        @test @inferred(m[[8, 2, 8, 1]]) == dmer"CACT"d
+        @test @inferred(m[Int[]]) === empty(typeof(m))
+
+        repeated = DNAOligomer{UInt8}(dna"TAG")
+        @test @inferred(repeated[[3, 3, 1]]) == DNAOligomer{UInt8}(dna"GGT")
+        @test_throws BoundsError repeated[[1, 1, 1, 1]]
+        @test_throws BoundsError (@inbounds repeated[[1, 1, 1, 1]])
+
+        for (x, indices, expected) in Any[
+                (Oligomer{RNAAlphabet{4}, UInt64}(rna"AUGN"), [4, 2, 4], rna"NUN"),
+                (AAOligomer{UInt128}(aa"KWOP"), [4, 1, 1], aa"PKK"),
+                (Oligomer{CharAlphabet, UInt512}("中Å!"), [3, 1, 2], "!中Å"),
+            ]
+            @test string(x[indices]) == string(expected)
+            @test typeof(x[indices]) === typeof(x)
+        end
+
+        @test_throws BoundsError m[[2, 9]]
+        @test_throws BoundsError m[[0, 1]]
+        @test_throws BoundsError m[[-1]]
+    end
+
+    @testset "Logical indexing" begin
+        m = dmer"TAGCTGAC"d
+        @test @inferred(m[Bool[1, 0, 1, 0, 0, 1, 0, 1]]) == dmer"TGGC"d
+        @test @inferred(m[trues(length(m))]) === m
+        @test @inferred(m[falses(length(m))]) === empty(typeof(m))
+
+        empty_mer = AAOligomer{UInt64}(aa"")
+        @test @inferred(empty_mer[Bool[]]) === empty_mer
+
+        @test_throws BoundsError m[trues(length(m) + 1)]
+        @test_throws BoundsError m[falses(length(m) - 1)]
     end
 
     @testset "Iteration" begin
@@ -876,6 +922,11 @@ end
         @test from_integer(zero_bps_type, value, 0).x == 0x00
     end
     @test from_integer(zero_bps_type, typemax(UInt8), 1).x == 0x01
+    zero_bps = from_integer(zero_bps_type, zero(UInt8), 4)
+    selected = @inferred zero_bps[[true, false, true, false]]
+    @test typeof(selected) === zero_bps_type
+    @test length(selected) == 2
+    @test selected.x == 0x02
 
     # Test non-zero BPS: capacity should be in range 0:div(8 * sizeof(U), B)
     for (A, bps) in [(DNAAlphabet{2}, 2), (DNAAlphabet{4}, 4), (AminoAcidAlphabet, 8)]
