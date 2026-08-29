@@ -236,6 +236,42 @@ end
 Base.isless(a::Oligomer, b::Oligomer) = throw(MethodError(isless, (a, b)))
 Base.cmp(a::Oligomer, b::Oligomer) = throw(MethodError(cmp, (a, b)))
 
+"""
+    widen(mer::Oligomer)
+    widen(::Type{T}) where {T <: Oligomer}
+
+Given an `Oligomer` type, return the `Oligomer` type with the same alphabet
+and with a larger backing integer type. E.g. for a `Oligomer{A, UInt32}`,
+return `Oligomer{A, UInt64}`.
+If there are no defined bit-integers wider than the one backing the input type,
+throw a `MethodError`.
+
+For the input integer types `UInt8`, `UInt16`, `UInt32`, `UInt64` and `UInt128`,
+the widened integer type will be next in that sequence (erroring for `UInt128`
+as input).
+When the `BitIntegers` package is loaded, this sequence extends to
+`UInt256`, `UInt512` and `UInt1024`.
+
+When given an instance `x::Oligomer`, construct `widen(typeof(x))(x)`.
+
+# Examples
+```
+julia> m1 = DNAOligomer{UInt16}("TAGCTAG"); m2 = widen(m1);
+
+julia> m2 === DNAOligomer{UInt32}(m1)
+true
+```
+"""
+Base.widen(x::Oligomer) = widen(typeof(x))(x)
+
+function Base.widen(::Type{Oligomer{A, U}}) where {A, U}
+    return Oligomer{A, widen_bitint(U)}
+end
+
+# We use this instead of Base.widen, because widen(UInt128) == BigInt,
+# and we don't back Oligomer by BigInt.
+widen_bitint(T::Union{Type{UInt8}, Type{UInt16}, Type{UInt32}, Type{UInt64}}) = widen(T)
+
 @inline function Base.getindex(x::Oligomer{A}, idx::AbstractUnitRange{<:Integer}) where {A}
     isempty(idx) && return empty(typeof(x))
     @boundscheck checkbounds(x, idx)

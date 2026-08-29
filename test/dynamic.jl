@@ -185,6 +185,35 @@ using BitIntegers
         @test_throws Exception AAOligomer{UInt8}(AAOligomer{UInt16}(aa"K"))
     end
 
+    @testset "Widening" begin
+        for (source, target) in [
+                (DNAOligomer{UInt8}, DNAOligomer{UInt16}),
+                (RNAOligomer{UInt16}, RNAOligomer{UInt32}),
+                (AAOligomer{UInt32}, AAOligomer{UInt64}),
+                (Oligomer{DNAAlphabet{4}, UInt64}, Oligomer{DNAAlphabet{4}, UInt128}),
+                (DNAOligomer{UInt128}, DNAOligomer{UInt256}),
+                (RNAOligomer{UInt256}, RNAOligomer{UInt512}),
+                (AAOligomer{UInt512}, AAOligomer{UInt1024}),
+            ]
+            @test widen(source) === target
+        end
+
+        for mer in [
+                DNAOligomer{UInt8}(dna"TAG"),
+                RNAOligomer{UInt32}(rna"UAGC"),
+                AAOligomer{UInt128}(aa"KWOP"),
+                Oligomer{DNAAlphabet{4}, UInt256}(dna"TAGCN"),
+            ]
+            widened = widen(mer)
+            @test typeof(widened) === widen(typeof(mer))
+            @test widened === widen(typeof(mer))(mer)
+            @test string(widened) == string(mer)
+            @test length(widened) == length(mer)
+        end
+
+        @test_throws MethodError widen(DNAOligomer{UInt1024})
+    end
+
     @testset "To Kmer" begin
         for s in [dna"TAGCTA", rna"UGCUGA", aa"PLKWM"]
             dkmer = Oligomer{typeof(Alphabet(s)), UInt64}(s)

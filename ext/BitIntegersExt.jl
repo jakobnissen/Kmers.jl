@@ -17,4 +17,8 @@ using Kmers: Kmers
     end
 end
 
+Kmers.widen_bitint(::Type{UInt128}) = UInt256
+Kmers.widen_bitint(::Type{UInt256}) = UInt512
+Kmers.widen_bitint(::Type{UInt512}) = UInt1024
+
 end # module
