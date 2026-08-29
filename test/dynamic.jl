@@ -555,6 +555,31 @@ end
         m_large = DNAOligomer{UInt512}(dna"TAGCTAGCTAGCTAGC")
         @test count(==(DNA_T), m_large) == 4
         @test count(==(DNA_A), m_large) == 4
+
+        # Test all standard alphabets and backing widths against explicit
+        # iteration. This covers zero encodings, absent symbols, empty values,
+        # and values that fill their backing type to capacity.
+        for A in (
+                    DNAAlphabet{2},
+                    RNAAlphabet{2},
+                    DNAAlphabet{4},
+                    RNAAlphabet{4},
+                    AminoAcidAlphabet,
+                ), U in (UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, UInt512)
+            T = Oligomer{A, U}
+            alphabet_symbols = collect(symbols(A()))
+            sequence = [
+                alphabet_symbols[mod1(i, length(alphabet_symbols))] for
+                    i in 1:capacity(T)
+            ]
+            oligomer = T(sequence)
+            @test length(oligomer) == capacity(T)
+
+            for symbol in alphabet_symbols
+                @test count(==(symbol), oligomer) == count(==(symbol), collect(oligomer))
+                @test count(==(symbol), empty(T)) == 0
+            end
+        end
     end
 end
 
