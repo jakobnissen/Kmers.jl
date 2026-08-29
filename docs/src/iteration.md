@@ -60,7 +60,7 @@ CanonicalRNAMers
 ```
 
 ### `UnambiguousKmers`
-[`UnambiguousKmers`](@ref) iterates unambiguous kmers (that is, kmers of the alphabets `DNAAlphabet{2}` or `RNAAlphabet{2}`).
+[`UnambiguousKmers`](@ref) iterates unambiguous kmers (that is, kmers over the alphabets `DNAAlphabet{2}` or `RNAAlphabet{2}`).
 Any kmers containing [ambiguous nucleotides](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC341218/) such as `W` or `N` are skipped.
 
 ```@docs

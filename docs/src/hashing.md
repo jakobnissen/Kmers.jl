@@ -22,7 +22,7 @@ julia> hash(mer"UGCUGUAC"r)
 
 The implementation of `Base.hash` for kmers strikes a compromise between providing a high-quality (non-cryptographic) hash and being reasonably fast.
 While hash collisions can easily be found, they are unlikely to occur at random.
-When kmers are of the same (or compatible) alphabets, different kmers hash to different values
+When kmers have the same (or compatible) alphabets, different kmers hash to different values
 (not counting the occasional hash collision), even when they have the same underlying bit pattern:
 
 ```jldoctest

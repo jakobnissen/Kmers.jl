@@ -14,7 +14,7 @@ For example, for K = 4, there are 4^4 = 256 possible DNA 4-mers.
 If these counts are ordered, the composition can be represented by a length 256
 vector.
 
-Vector similarity operations (e.g. cosine distance) can then be used as an
+Vector similarity operations (e.g., cosine distance) can then be used as an
 approximate proxy for phylogenetic distance.
 
 In the example below, we exploit that:
