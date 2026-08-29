@@ -304,6 +304,13 @@ end
         @test from_integer(AAKmer{2}, typemax(UInt128)) isa AAKmer{2}
         @test from_integer(AAKmer{14}, 0xff) isa AAKmer{14}
 
+        # Round trips are independent of the input integer width.
+        short_mer = mer"TAG"d
+        short_encoding = as_integer(short_mer)
+        for U in (UInt8, UInt16, UInt32, UInt64, UInt128)
+            @test from_integer(typeof(short_mer), short_encoding % U) === short_mer
+        end
+
         # Errors if bit type or kmer is too wide
         @test_throws ArgumentError from_integer(DNAKmer{67}, 0x01)
         @test_throws ArgumentError from_integer(AAKmer{20}, UInt(0))
@@ -946,30 +953,34 @@ end
     @testset "Unsafe extract" begin
         seq = dna"TTGCTAGGGATTCGAGGATCCTCTAGAGCGCGGCACGATCTTAGCAC"
         unsafe_extract = Kmers.unsafe_extract
-        @test unsafe_extract(Kmers.FourToTwo(), DNAKmer{6, 1}, seq, 3) ==
+        @test @inferred(unsafe_extract(Kmers.FourToTwo(), DNAKmer{6, 1}, seq, 3)) ==
             DNAKmer{6}(seq[3:8])
         @test unsafe_extract(Kmers.FourToTwo(), DNAKmer{36, 2}, seq, 2) ==
             DNAKmer{36}(seq[2:37])
 
         seq = LongDNA{2}(seq)
-        @test unsafe_extract(Kmers.TwoToFour(), Kmer{DNAAlphabet{4}, 6, 1}, seq, 3) ==
+        @test @inferred(
+            unsafe_extract(Kmers.TwoToFour(), Kmer{DNAAlphabet{4}, 6, 1}, seq, 3)
+        ) ==
             Kmer{DNAAlphabet{4}, 6}(seq[3:8])
         @test unsafe_extract(Kmers.TwoToFour(), Kmer{DNAAlphabet{4}, 36, 3}, seq, 2) ==
             Kmer{DNAAlphabet{4}, 36}(seq[2:37])
 
-        @test unsafe_extract(Kmers.Copyable(), DNAKmer{6, 1}, seq, 3) ==
+        @test @inferred(unsafe_extract(Kmers.Copyable(), DNAKmer{6, 1}, seq, 3)) ==
             DNAKmer{6}(seq[3:8])
         @test unsafe_extract(Kmers.Copyable(), DNAKmer{36, 2}, seq, 2) ==
             DNAKmer{36}(seq[2:37])
 
         seq = codeunits(String(seq))
-        @test unsafe_extract(Kmers.AsciiEncode(), DNAKmer{6, 1}, seq, 3) ==
+        @test @inferred(unsafe_extract(Kmers.AsciiEncode(), DNAKmer{6, 1}, seq, 3)) ==
             DNAKmer{6}(seq[3:8])
         @test unsafe_extract(Kmers.AsciiEncode(), DNAKmer{36, 2}, seq, 2) ==
             DNAKmer{36}(seq[2:37])
 
         seq = LongSequence{CharAlphabet}("中国¨Å!人大æ网")
-        @test unsafe_extract(Kmers.GenericRecoding(), Kmer{CharAlphabet, 3, 2}, seq, 4) ==
+        @test @inferred(
+            unsafe_extract(Kmers.GenericRecoding(), Kmer{CharAlphabet, 3, 2}, seq, 4)
+        ) ==
             Kmer{CharAlphabet, 3}("Å!人")
     end
 

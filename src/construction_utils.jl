@@ -5,6 +5,71 @@
 # shift_encoding
 # shift_seq
 
+################################################
+# Per-symbol recoding
+################################################
+
+# Keep recoding of individual symbols in these small helpers so both Kmer and
+# Oligomer construction use exactly the same validation and encoding rules.
+@inline function _recode_element(
+        ::TwoToFour,
+        ::Alphabet,
+        source::BioSequence,
+        index::Integer,
+        ::Type{U},
+    ) where {U <: Unsigned}
+    encoding = BioSequences.extract_encoded_element(source, index) % U
+    return left_shift(one(U), encoding)
+end
+
+@inline function _recode_element(
+        ::FourToTwo,
+        alphabet::Alphabet,
+        source::BioSequence,
+        index::Integer,
+        ::Type{U},
+    ) where {U <: Unsigned}
+    encoding = BioSequences.extract_encoded_element(source, index) % U
+    isone(count_ones(encoding)) || throw_uncertain(alphabet, eltype(source), encoding)
+    return trailing_zeros(encoding) % U
+end
+
+@inline function _recode_element(
+        ::Copyable,
+        ::Alphabet,
+        source::BioSequence,
+        index::Integer,
+        ::Type{U},
+    ) where {U <: Unsigned}
+    return BioSequences.extract_encoded_element(source, index) % U
+end
+
+@inline function _recode_element(
+        ::AsciiEncode,
+        alphabet::Alphabet,
+        source::AbstractVector{UInt8},
+        index::Integer,
+        ::Type{U},
+    ) where {U <: Unsigned}
+    byte = @inbounds source[index]
+    encoding = BioSequences.ascii_encode(alphabet, byte)
+    if encoding > 0x7f
+        throw(BioSequences.EncodeError(alphabet, byte))
+    end
+    return encoding % U
+end
+
+@inline function _recode_element(
+        ::GenericRecoding,
+        alphabet::Alphabet,
+        source,
+        index::Integer,
+        ::Type{U},
+    ) where {U <: Unsigned}
+    symbol = convert(eltype(alphabet), @inbounds(source[index]))
+    return BioSequences.encode(alphabet, symbol) % U
+end
+
 """
     unsafe_extract(::RecodingScheme, T::Type{<:Kmer}, seq, from::Int) -> T
     unsafe_extract(::RecodingScheme, T::Type{<:Oligomer}, seq, from::Int, len::Int) -> T
@@ -32,79 +97,78 @@ AGCT
 ```
 """
 @inline function unsafe_extract(
-        ::TwoToFour,
+        recoding::TwoToFour,
         ::Type{T},
         seq::BioSequence,
         from_index,
     ) where {T <: Kmer}
     data = zero_tuple(T)
+    alphabet = Alphabet(T)
     for i in from_index:(from_index + ksize(T) - 1)
-        encoding = left_shift(UInt(1), UInt(BioSequences.extract_encoded_element(seq, i)))
+        encoding = _recode_element(recoding, alphabet, seq, i, UInt)
         (_, data) = leftshift_carry(data, 4, encoding)
     end
     return T(unsafe, data)
 end
 
 @inline function unsafe_extract(
-        ::FourToTwo,
+        recoding::FourToTwo,
         ::Type{T},
         seq::BioSequence,
         from_index,
     ) where {T <: Kmer}
     data = zero_tuple(T)
+    alphabet = Alphabet(T)
     for i in from_index:(from_index + ksize(T) - 1)
-        encoding = UInt(BioSequences.extract_encoded_element(seq, i))::UInt
-        isone(count_ones(encoding)) || throw_uncertain(Alphabet(T), eltype(seq), encoding)
-        (_, data) = leftshift_carry(data, 2, trailing_zeros(encoding) % UInt)
+        encoding = _recode_element(recoding, alphabet, seq, i, UInt)
+        (_, data) = leftshift_carry(data, 2, encoding)
     end
     return T(unsafe, data)
 end
 
 @inline function unsafe_extract(
-        ::Copyable,
+        recoding::Copyable,
         ::Type{T},
         seq::BioSequence,
         from_index,
     ) where {T <: Kmer}
     data = zero_tuple(T)
-    bps = BioSequences.bits_per_symbol(Alphabet(seq))
+    alphabet = Alphabet(T)
+    bps = BioSequences.bits_per_symbol(alphabet)
     for i in from_index:(from_index + ksize(T) - 1)
-        encoding = UInt(BioSequences.extract_encoded_element(seq, i))::UInt
+        encoding = _recode_element(recoding, alphabet, seq, i, UInt)
         (_, data) = leftshift_carry(data, bps, encoding)
     end
     return T(unsafe, data)
 end
 
 @inline function unsafe_extract(
-        ::AsciiEncode,
+        recoding::AsciiEncode,
         ::Type{T},
         seq::AbstractVector{UInt8},
         from_index,
     ) where {T <: Kmer}
     data = zero_tuple(T)
-    bps = BioSequences.bits_per_symbol(Alphabet(T))
+    alphabet = Alphabet(T)
+    bps = BioSequences.bits_per_symbol(alphabet)
     @inbounds for i in from_index:(from_index + ksize(T) - 1)
-        byte = seq[i]
-        encoding = BioSequences.ascii_encode(Alphabet(T), byte)
-        if encoding > 0x7f
-            throw(BioSequences.EncodeError(Alphabet(T), byte))
-        end
-        (_, data) = leftshift_carry(data, bps, encoding % UInt)
+        encoding = _recode_element(recoding, alphabet, seq, i, UInt)
+        (_, data) = leftshift_carry(data, bps, encoding)
     end
     return T(unsafe, data)
 end
 
 @inline function unsafe_extract(
-        ::GenericRecoding,
+        recoding::GenericRecoding,
         ::Type{T},
         seq,
         from_index,
     ) where {T <: Kmer}
     data = zero_tuple(T)
-    bps = BioSequences.bits_per_symbol(Alphabet(T))
+    alphabet = Alphabet(T)
+    bps = BioSequences.bits_per_symbol(alphabet)
     @inbounds for i in 0:(ksize(T) - 1)
-        symbol = convert(eltype(T), seq[from_index + i])
-        encoding = UInt(BioSequences.encode(Alphabet(T), symbol))
+        encoding = _recode_element(recoding, alphabet, seq, from_index + i, UInt)
         (_, data) = leftshift_carry(data, bps, encoding)
     end
     return T(unsafe, data)

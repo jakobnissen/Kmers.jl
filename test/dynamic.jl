@@ -509,6 +509,15 @@ end
             m2 = from_integer(typeof(m), u, length(m))
             @test m === m2
         end
+
+        # Use a short sequence whose coding bits fit in every input width, and
+        # vary the input and target widths independently.
+        for Target in [UInt8, UInt16, UInt32, UInt64, UInt128],
+                Input in [UInt8, UInt16, UInt32, UInt64, UInt128, UInt256]
+            m = DNAOligomer{Target}(dna"TAG")
+            input = as_integer(m) % Input
+            @test from_integer(typeof(m), input, length(m)) === m
+        end
     end
 end
 
@@ -960,12 +969,17 @@ end
     # Create a zero-BPS alphabet for testing
     struct ZeroBPSAlphabet <: Alphabet end
     Base.eltype(::Type{ZeroBPSAlphabet}) = DNA
+    BioSequences.encode(::ZeroBPSAlphabet, ::DNA) = zero(UInt)
+    BioSequences.decode(::ZeroBPSAlphabet, ::Unsigned) = DNA_A
     BioSequences.BitsPerSymbol(::ZeroBPSAlphabet) = BioSequences.BitsPerSymbol{0}()
 
     # Test zero BPS: capacity should be clamped to typemax(Int)
     @test capacity(Oligomer{ZeroBPSAlphabet, UInt8}) == clamp(typemax(UInt8), Int)
     @test capacity(Oligomer{ZeroBPSAlphabet, UInt32}) == clamp(typemax(UInt32), Int)
     @test capacity(Oligomer{ZeroBPSAlphabet, UInt128}) == typemax(Int)
+    @test_throws ErrorException from_integer(
+        Oligomer{ZeroBPSAlphabet, UInt8}, zero(UInt8), 256
+    )
 
     # Zero-BPS values have no coding bits, so from_integer must retain only the
     # requested length regardless of its integer input.
@@ -975,6 +989,16 @@ end
     end
     @test from_integer(zero_bps_type, typemax(UInt8), 1).x == 0x01
     zero_bps = from_integer(zero_bps_type, zero(UInt8), 4)
+
+    symbols = fill(DNA_A, 4)
+    zero_bps_kmer = Kmer{ZeroBPSAlphabet, 4}(symbols)
+    @test length(zero_bps_kmer) == 4
+    @test zero_bps_kmer.data === ()
+    @test Oligomer{ZeroBPSAlphabet, UInt8}(symbols) === zero_bps
+    @test @inferred(
+        Kmers.unsafe_extract(Kmers.GenericRecoding(), zero_bps_type, symbols, 1, 4)
+    ) === zero_bps
+
     selected = @inferred zero_bps[[true, false, true, false]]
     @test typeof(selected) === zero_bps_type
     @test length(selected) == 2

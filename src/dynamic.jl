@@ -382,11 +382,15 @@ function Kmers.as_integer(x::Oligomer)
 end
 
 """
-    from_integer(T::Type{<:Oligomer{A, U}}, u::U, len::Int)::T
+    from_integer(T::Type{<:Oligomer{A, U}}, u::Unsigned, len::Int)::T
 
 Similar to `from_integer` for `Kmer`, but the length of the resulting `Oligomer`
 must be passed as an argument. Will error if `len` is larger than the maximal size
 supported by `T`.
+
+The input may be any unsigned integer type. Only the lowest coding bits are used,
+so round trips are independent of the width of the input integer when it can hold
+all coding bits.
 
 If `u` is obtained from a `Oligomer` with a length different from `len`,
 the resulting `Oligomer` is reproducible, but not correct and may change between
@@ -408,7 +412,7 @@ false
 ```
 """
 function Kmers.from_integer(
-        T::Type{Oligomer{A, U}}, x::U, len::Int
+        T::Type{Oligomer{A, U}}, x::Unsigned, len::Int
     ) where {A <: Alphabet, U <: Unsigned}
     if (len % UInt) > (capacity(T) % UInt)
         error("Length too large for dynamic kmer")
@@ -417,7 +421,7 @@ function Kmers.from_integer(
     iszero(bps) && return _new_dynamic_kmer(A, len % U)
     iszero(len) && return _new_dynamic_kmer(A, zero(U))
     shift = 8 * sizeof(U) - len * bps
-    u = left_shift(x, shift)
+    u = left_shift(x % U, shift)
     return _new_dynamic_kmer(A, u | (len % U))
 end
 
@@ -426,25 +430,7 @@ end
 ################################################
 
 @inline function unsafe_extract(
-        ::TwoToFour,
-        ::Type{T},
-        source::BioSequence,
-        from::Int,
-        len::Int,
-    ) where {A, U, T <: Oligomer{A, U}}
-    u = zero(U)
-    i = 0
-    while i < len
-        encoding = left_shift(one(U), BioSequences.extract_encoded_element(source, from + i) % U)
-        u = left_shift(u, 4) | encoding
-        i += 1
-    end
-    u = left_shift(u, 8 * sizeof(U) - 4 * len)
-    return _new_dynamic_kmer(A, u | (len % U))
-end
-
-@inline function unsafe_extract(
-        ::FourToTwo,
+        recoding::TwoToFour,
         ::Type{T},
         source::BioSequence,
         from::Int,
@@ -454,9 +440,27 @@ end
     alphabet = A()
     i = 0
     while i < len
-        encoding = BioSequences.extract_encoded_element(source, from + i) % U
-        isone(count_ones(encoding)) || throw_uncertain(alphabet, eltype(source), encoding)
-        u = left_shift(u, 2) | (trailing_zeros(encoding) % U)
+        encoding = _recode_element(recoding, alphabet, source, from + i, U)
+        u = left_shift(u, 4) | encoding
+        i += 1
+    end
+    u = left_shift(u, 8 * sizeof(U) - 4 * len)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
+@inline function unsafe_extract(
+        recoding::FourToTwo,
+        ::Type{T},
+        source::BioSequence,
+        from::Int,
+        len::Int,
+    ) where {A, U, T <: Oligomer{A, U}}
+    u = zero(U)
+    alphabet = A()
+    i = 0
+    while i < len
+        encoding = _recode_element(recoding, alphabet, source, from + i, U)
+        u = left_shift(u, 2) | encoding
         i += 1
     end
     u = left_shift(u, 8 * sizeof(U) - 2 * len)
@@ -464,17 +468,18 @@ end
 end
 
 @inline function unsafe_extract(
-        ::Copyable,
+        recoding::Copyable,
         ::Type{T},
         source::BioSequence,
         from::Int,
         len::Int,
     ) where {A, U, T <: Oligomer{A, U}}
-    bps = BioSequences.bits_per_symbol(A())
+    alphabet = A()
+    bps = BioSequences.bits_per_symbol(alphabet)
     u = zero(U)
     i = 0
     while i < len
-        encoding = BioSequences.extract_encoded_element(source, from + i) % U
+        encoding = _recode_element(recoding, alphabet, source, from + i, U)
         u = left_shift(u, bps) | encoding
         i += 1
     end
@@ -483,7 +488,7 @@ end
 end
 
 @inline function unsafe_extract(
-        ::AsciiEncode,
+        recoding::AsciiEncode,
         ::Type{T},
         source::AbstractVector{UInt8},
         from::Int,
@@ -494,12 +499,8 @@ end
     u = zero(U)
     i = 0
     while i < len
-        byte = @inbounds source[from + i]
-        encoding = BioSequences.ascii_encode(alphabet, byte)
-        if encoding > 0x7f
-            throw(BioSequences.EncodeError(alphabet, byte))
-        end
-        u = left_shift(u, bps) | (encoding % U)
+        encoding = _recode_element(recoding, alphabet, source, from + i, U)
+        u = left_shift(u, bps) | encoding
         i += 1
     end
     u = left_shift(u, 8 * sizeof(U) - bps * len)
@@ -507,7 +508,7 @@ end
 end
 
 @inline function unsafe_extract(
-        ::GenericRecoding,
+        recoding::GenericRecoding,
         ::Type{T},
         source,
         from::Int,
@@ -518,8 +519,7 @@ end
     u = zero(U)
     i = 0
     while i < len
-        symbol = convert(eltype(T), @inbounds(source[from + i]))
-        encoding = BioSequences.encode(alphabet, symbol) % U
+        encoding = _recode_element(recoding, alphabet, source, from + i, U)
         u = left_shift(u, bps) | encoding
         i += 1
     end
