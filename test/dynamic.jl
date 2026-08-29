@@ -259,6 +259,58 @@ using BitIntegers
     end
 end
 
+@testset "Unsafe runtime-length extraction" begin
+    unsafe_extract = Kmers.unsafe_extract
+
+    copy_source = LongDNA{2}("CCTAGCAAT")
+    @test @inferred(
+        unsafe_extract(Kmers.Copyable(), DNAOligomer{UInt32}, copy_source, 3, 4)
+    ) == DNAOligomer{UInt32}("TAGC")
+    @test @inferred(
+        unsafe_extract(Kmers.Copyable(), DNAOligomer{UInt32}, copy_source, 10, 0)
+    ) === empty(DNAOligomer{UInt32})
+
+    two_bit_source = LongRNA{2}("CCUAGCAAU")
+    four_bit_type = Oligomer{DNAAlphabet{4}, UInt32}
+    @test @inferred(
+        unsafe_extract(Kmers.TwoToFour(), four_bit_type, two_bit_source, 3, 4)
+    ) == four_bit_type("TAGC")
+    @test @inferred(
+        unsafe_extract(Kmers.TwoToFour(), four_bit_type, two_bit_source, 10, 0)
+    ) === empty(four_bit_type)
+
+    four_bit_source = LongDNA{4}("CCTAGCAAN")
+    @test @inferred(
+        unsafe_extract(Kmers.FourToTwo(), DNAOligomer{UInt32}, four_bit_source, 3, 4)
+    ) == DNAOligomer{UInt32}("TAGC")
+    @test @inferred(
+        unsafe_extract(Kmers.FourToTwo(), DNAOligomer{UInt32}, four_bit_source, 10, 0)
+    ) === empty(DNAOligomer{UInt32})
+    @test_throws BioSequences.EncodeError unsafe_extract(
+        Kmers.FourToTwo(), DNAOligomer{UInt32}, four_bit_source, 7, 3
+    )
+
+    ascii_source = codeunits("XXTAGCXP")
+    @test @inferred(
+        unsafe_extract(Kmers.AsciiEncode(), DNAOligomer{UInt32}, ascii_source, 3, 4)
+    ) == DNAOligomer{UInt32}("TAGC")
+    @test @inferred(
+        unsafe_extract(Kmers.AsciiEncode(), DNAOligomer{UInt32}, ascii_source, 10, 0)
+    ) === empty(DNAOligomer{UInt32})
+    @test_throws BioSequences.EncodeError unsafe_extract(
+        Kmers.AsciiEncode(), DNAOligomer{UInt32}, ascii_source, 8, 1
+    )
+
+    generic_source = LongSequence{CharAlphabet}("中Å!人大网")
+    generic_type = Oligomer{CharAlphabet, UInt256}
+    @test @inferred(
+        unsafe_extract(Kmers.GenericRecoding(), generic_type, generic_source, 2, 3)
+    ) == generic_type("Å!人")
+    @test @inferred(
+        unsafe_extract(Kmers.GenericRecoding(), generic_type, generic_source, 7, 0)
+    ) === empty(generic_type)
+end
+
 @testset "Indexing and iteration" begin
     @testset "Scalar indexing" begin
         m = dmer"TAGCTGAC"d

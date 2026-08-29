@@ -8,6 +8,7 @@ DocTestSetup = quote
     using MinHash
 end
 ```
+
 ## MinHash
 The MinHash algorithm is used in tools such as
 [Mash](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0997-x)
@@ -27,7 +28,7 @@ n_bytes = sum(1:25) do genome
 end
 flush(writer)
 
-# Time minhashing the 50 genomes
+# Time minhashing the 25 genomes
 timing = @timed FASTAReader(seekstart(buffer); copy=false) do reader
     map(reader) do record
         seq = codeunits(sequence(record))

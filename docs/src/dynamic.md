@@ -36,23 +36,23 @@ To solve this, Kmers.jl includes the `Oligomer` type.
 This type is an immutable, bitstype biosequence, similar to the `Kmer` type, but with the length stored as a runtime value rather than a compile-time type parameter.
 
 ```@docs
-Oligo
+Oligomer
 ```
 
 ### Basic Properties
 
 `Oligomer` has several important characteristics:
 
-- **Immutable**: All operations return new instances. There is no `push!`, only `push`.
-- **Bitstype**: Stored inline in a single unsigned integer.
-- **Runtime length**: Unlike `Kmer`, the length is not part of the type, avoiding type instability for variable-length workloads.
-- **Size limits**: Each `Oligomer` type has a maximum capacity determined by its alphabet and backing integer type.
-- **Performance**: Slightly slower than `Kmer` but much faster than `LongSequence` for small sequences.
+* **Immutable**: All operations return new instances. There is no `push!`, only `push`.
+* **Bitstype**: Stored inline in a single unsigned integer.
+* **Runtime length**: Unlike `Kmer`, the length is not part of the type, avoiding type instability for variable-length workloads.
+* **Size limits**: Each `Oligomer` type has a maximum capacity determined by its alphabet and backing integer type.
+* **Performance**: Slightly slower than `Kmer` but much faster than `LongSequence` for small sequences.
 
 ### Type Parameters
 
 `Oligomer{A, U}` is parameterized by `A`, its `Alphabet`, and `U`, the backing unsigned integer type.
-Thus, a `Oligomer{DNAAlphabet{4}, UInt32}` is 4 bytes in size, and contains 4-bit DNA.
+Thus, an `Oligomer{DNAAlphabet{4}, UInt32}` is 4 bytes in size and contains 4-bit DNA.
 
 The backing integer `U` stores both the sequence data and the runtime length.
 This imposes capacity limits. Use `capacity(T)` to determine the maximum number of symbols for a given type.
@@ -76,15 +76,15 @@ The maximum number of symbols depends on both the alphabet and the backing integ
 | Type | Capacity | Bits per symbol | Notes |
 |------|----------|-----------------|-------|
 | `DNAOligomer{UInt32}` | 14 | 2 | Good for short primers |
-| `DNAOligomer{UInt64}` | 30 | 2 | Standard choice for DNA/RNA |
-| `RNAOligomer{UInt64}` | 30 | 2 | Same capacity as DNA |
-| `AAOligomer{UInt128}` | 15 | 8 | Limited by byte-per-symbol |
+| `DNAOligomer{UInt64}` | 29 | 2 | Standard choice for DNA/RNA |
+| `RNAOligomer{UInt64}` | 29 | 2 | Same capacity as DNA |
+| `AAOligomer{UInt128}` | 15 | 8 | Limited by bytes per symbol |
 
 Choose a larger backing integer for longer sequences, but be aware that integers larger than 64 bits
-typically become slower the larger they are.
-For very large dynamic kmers, you can use the `BitIntegers.jl` package that provide e.g. `UInt512`,
-but make sure to test that for your application, huge dynamic kmers are still faster than
-`BioSequences.LongSequence`. 
+typically become slower as they get larger.
+For very large dynamic kmers, you can use the `BitIntegers.jl` package that provides, e.g., `UInt512`,
+but make sure to test whether, for your application, huge dynamic kmers are still faster than
+`BioSequences.LongSequence`.
 
 ### Construction Methods
 
@@ -94,7 +94,7 @@ Dynamic kmers can be constructed with the `@dmer_str` macro, similar to kmers:
 @dmer_str
 ```
 
-Like other `BioSequence`s, they can also be constructed from strings, `AbstractVector{UInt8}`
+Like other `BioSequence` types, they can also be constructed from strings, `AbstractVector{UInt8}`
 (interpreted as containing ASCII), and other `BioSequence`s.
 
 ```jldoctest
@@ -115,9 +115,22 @@ julia> AAOligomer{UInt64}([0x61, 0x63])  # From ASCII AbstractVector{UInt8}
 AC
 ```
 
+For extracting a runtime-length window without bounds checks, use the
+five-argument [`unsafe_extract`](@ref) overload. The source range and destination
+capacity must be checked by the caller; symbol validity is still checked during
+recoding.
+
+```jldoctest
+julia> source = codeunits("CCTAGCAA");
+
+julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAOligomer{UInt32}, source, 3, 4)
+4nt DNAOligomer{UInt32}:
+TAGC
+```
+
 ### Common Operations
 
-Dynamic kmers behave similar to other biosequences, supporting biological transformations, indexing, and length-changing operations.
+Dynamic kmers behave similarly to other biosequences, supporting biological transformations, indexing, and length-changing operations.
 
 #### Biological Transformations
 
@@ -138,8 +151,8 @@ ATGCTA
 #### Modifying Length
 
 All operations return new instances since `Oligomer` is immutable.
-They use e.g. `pop` instead of `pop!`.
-Instead of `popfirst!` and `pushfirst!`, it uses `pop_first` and `push_first`
+They use, e.g., `pop` instead of `pop!`.
+Instead of `popfirst!` and `pushfirst!`, use `pop_first` and `push_first`
 (note the underscore):
 
 ```jldoctest
@@ -165,9 +178,8 @@ TTA
 ```
 
 #### Indexing and Slicing
-Slicing returns a value of the same type. Unlike for `Kmer`, this is type stable.
-Use Base.setindex to create a new kmer with a given `BioSymbol` replaced.
-
+Slicing returns a value of the same type. Unlike with `Kmer`, this is type stable.
+Use `Base.setindex` to create a new kmer with a given `BioSymbol` replaced.
 
 ```jldoctest
 julia> d = dmer"TAGCAT"d
@@ -223,7 +235,7 @@ true
 #### Translating Dynamic Kmers
 
 Dynamic kmers can be translated to obtain `AAOligomer{U}` with various integer types `U`.
-The type of `U` is chosen depending on the input type, to ensure that the result will fit in
+The type of `U` is chosen depending on the input type to ensure that the result will fit in
 the output type.
 
 By default, the largest `AAOligomer` type is `AAOligomer{UInt128}`. However, if the package

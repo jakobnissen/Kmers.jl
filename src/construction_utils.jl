@@ -7,12 +7,15 @@
 
 """
     unsafe_extract(::RecodingScheme, T::Type{<:Kmer}, seq, from::Int) -> T
+    unsafe_extract(::RecodingScheme, T::Type{<:Oligomer}, seq, from::Int, len::Int) -> T
 
-Extract a `Kmer` of type `T` from `seq` beginning at index `from`.
-This function is useful to create kmer or kmer-like types.
+Extract a `Kmer` of type `T` from `seq` beginning at index `from`, or an
+`Oligomer` containing `len` symbols beginning at that index. This function is
+useful to create kmer or kmer-like types.
 
 This function does not do any bounds checking, so the user must know
-that `from:from+K-1` is inbounds in `seq`.
+that the extracted range is inbounds in `seq`. For `Oligomer`, the user must
+also know that `len` does not exceed [`capacity(T)`](@ref).
 The validity of the data in the `seq` is validated by this function.
 
 # Examples
@@ -21,6 +24,10 @@ julia> seq = b"TAGCTAGA";
 
 julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAKmer{4, 1}, seq, 2)
 DNA 4-mer:
+AGCT
+
+julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAOligomer{UInt16}, seq, 2, 4)
+4nt DNAOligomer{UInt16}:
 AGCT
 ```
 """

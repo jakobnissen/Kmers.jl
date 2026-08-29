@@ -421,6 +421,112 @@ function Kmers.from_integer(
     return _new_dynamic_kmer(A, u | (len % U))
 end
 
+################################################
+# Unsafe extract
+################################################
+
+@inline function unsafe_extract(
+        ::TwoToFour,
+        ::Type{T},
+        source::BioSequence,
+        from::Int,
+        len::Int,
+    ) where {A, U, T <: Oligomer{A, U}}
+    u = zero(U)
+    i = 0
+    while i < len
+        encoding = left_shift(one(U), BioSequences.extract_encoded_element(source, from + i) % U)
+        u = left_shift(u, 4) | encoding
+        i += 1
+    end
+    u = left_shift(u, 8 * sizeof(U) - 4 * len)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
+@inline function unsafe_extract(
+        ::FourToTwo,
+        ::Type{T},
+        source::BioSequence,
+        from::Int,
+        len::Int,
+    ) where {A, U, T <: Oligomer{A, U}}
+    u = zero(U)
+    alphabet = A()
+    i = 0
+    while i < len
+        encoding = BioSequences.extract_encoded_element(source, from + i) % U
+        isone(count_ones(encoding)) || throw_uncertain(alphabet, eltype(source), encoding)
+        u = left_shift(u, 2) | (trailing_zeros(encoding) % U)
+        i += 1
+    end
+    u = left_shift(u, 8 * sizeof(U) - 2 * len)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
+@inline function unsafe_extract(
+        ::Copyable,
+        ::Type{T},
+        source::BioSequence,
+        from::Int,
+        len::Int,
+    ) where {A, U, T <: Oligomer{A, U}}
+    bps = BioSequences.bits_per_symbol(A())
+    u = zero(U)
+    i = 0
+    while i < len
+        encoding = BioSequences.extract_encoded_element(source, from + i) % U
+        u = left_shift(u, bps) | encoding
+        i += 1
+    end
+    u = left_shift(u, 8 * sizeof(U) - bps * len)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
+@inline function unsafe_extract(
+        ::AsciiEncode,
+        ::Type{T},
+        source::AbstractVector{UInt8},
+        from::Int,
+        len::Int,
+    ) where {A, U, T <: Oligomer{A, U}}
+    alphabet = A()
+    bps = BioSequences.bits_per_symbol(alphabet)
+    u = zero(U)
+    i = 0
+    while i < len
+        byte = @inbounds source[from + i]
+        encoding = BioSequences.ascii_encode(alphabet, byte)
+        if encoding > 0x7f
+            throw(BioSequences.EncodeError(alphabet, byte))
+        end
+        u = left_shift(u, bps) | (encoding % U)
+        i += 1
+    end
+    u = left_shift(u, 8 * sizeof(U) - bps * len)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
+@inline function unsafe_extract(
+        ::GenericRecoding,
+        ::Type{T},
+        source,
+        from::Int,
+        len::Int,
+    ) where {A, U, T <: Oligomer{A, U}}
+    alphabet = A()
+    bps = BioSequences.bits_per_symbol(alphabet)
+    u = zero(U)
+    i = 0
+    while i < len
+        symbol = convert(eltype(T), @inbounds(source[from + i]))
+        encoding = BioSequences.encode(alphabet, symbol) % U
+        u = left_shift(u, bps) | encoding
+        i += 1
+    end
+    u = left_shift(u, 8 * sizeof(U) - bps * len)
+    return _new_dynamic_kmer(A, u | (len % U))
+end
+
 ## More construction utils
 function Oligomer{T1, U}(x::Oligomer{T2, U}) where {
         B,
@@ -463,21 +569,11 @@ function build_dynamic_kmer(::RecodingScheme, ::Type{T}, x) where {T}
     return _new_dynamic_kmer(typeof(A), (len % U) | u)
 end
 
-# Here, we can extract the encoding directly
-function build_dynamic_kmer(::Copyable, ::Type{T}, x::BioSequence) where {T}
+# Indexed BioSequences can all use the public runtime-length extraction API.
+@inline function build_dynamic_kmer(R::RecodingScheme, ::Type{T}, x::BioSequence) where {T}
     len = length(x)
     len > capacity(T) && error("Iterator size exceeds maximum capacity of dynamic kmer")
-    bps = BioSequences.bits_per_symbol(T)
-    shift = 8 * sizeof(T)
-    U = utype(T)
-    u = zero(U)
-    A = Alphabet(T)
-    for i in eachindex(x)
-        shift -= bps
-        enc = BioSequences.extract_encoded_element(x, i) % U
-        u |= left_shift(enc, shift)
-    end
-    return _new_dynamic_kmer(typeof(A), (len % U) | u)
+    return unsafe_extract(R, T, x, firstindex(x), len)
 end
 
 # More efficient, since the internal representation is even closer.
@@ -529,51 +625,7 @@ end
 @inline function build_dynamic_kmer(::AsciiEncode, ::Type{T}, x::AbstractVector{UInt8}) where {T}
     len = length(x)
     len > capacity(T) && error("Iterator size exceeds maximum capacity of dynamic kmer")
-    U = utype(T)
-    u = zero(U)
-    shift = 8 * sizeof(T)
-    bps = BioSequences.bits_per_symbol(T)
-    A = Alphabet(T)
-    for i in eachindex(x)
-        byte = x[i]
-        encoding = BioSequences.ascii_encode(A, byte)
-        if encoding > 0x7f
-            throw(BioSequences.EncodeError(A, byte))
-        end
-        shift -= bps
-        u |= left_shift(encoding % U, shift)
-    end
-    return _new_dynamic_kmer(typeof(A), (len % U) | u)
-end
-
-@inline function build_dynamic_kmer(::TwoToFour, ::Type{T}, x::BioSequence) where {T}
-    len = length(x)
-    len > capacity(T) && error("Iterator size exceeds maximum capacity of dynamic kmer")
-    U = utype(T)
-    u = zero(U)
-    shift = 8 * sizeof(T)
-    for i in eachindex(x)
-        shift -= 4
-        encoding = left_shift(one(U), BioSequences.extract_encoded_element(x, i) % U)
-        u |= left_shift(encoding % U, shift)
-    end
-    return _new_dynamic_kmer(typeof(Alphabet(T)), (len % U) | u)
-end
-
-@inline function build_dynamic_kmer(::FourToTwo, ::Type{T}, x::BioSequence) where {T}
-    len = length(x)
-    len > capacity(T) && error("Iterator size exceeds maximum capacity of dynamic kmer")
-    U = utype(T)
-    u = zero(U)
-    shift = 8 * sizeof(T)
-    A = Alphabet(T)
-    for i in eachindex(x)
-        shift -= 2
-        encoding = BioSequences.extract_encoded_element(x, i) % U
-        isone(count_ones(encoding)) || throw_uncertain(A, eltype(x), encoding)
-        u |= left_shift(trailing_zeros(encoding) % U, shift)
-    end
-    return _new_dynamic_kmer(typeof(A), (len % U) | u)
+    return unsafe_extract(AsciiEncode(), T, x, firstindex(x), len)
 end
 
 # Switch encoding data of `x` to `T`. Error if it doesn't fit.
