@@ -548,8 +548,8 @@ end
         @test_throws Exception translate(Kmer{RNAAlphabet{4}, 3}("UC-"))
 
         # Invalid alphabet
-        @test_throws Exception transate(mer"CCC"a)
-        @test_throws Exception transate(Kmer{CharAlphabet, 3}("GGG"))
+        @test_throws MethodError translate(mer"CCC"a)
+        @test_throws MethodError translate(Kmer{CharAlphabet, 3}("GGG"))
 
         # Compare to LongSequence
         for s in [
