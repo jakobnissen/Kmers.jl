@@ -27,7 +27,7 @@ In the example below, we exploit that:
 using BioSequences, FASTX, Kmers
 using BioSequences: encoded_data
 
-function composition(record::FASTARecord)
+function composition(record::FASTA.Record)
     counts = zeros(UInt32, 256)
     frequencies = zeros(Float32, 256)
     for kmer in FwDNAMers{4}(sequence(record))
@@ -41,7 +41,7 @@ function composition(record::FASTARecord)
 end
 
 # Make two FASTA records - could be from an assembly
-recs = [FASTARecord(string(i), randdnaseq(10000)) for i in "AB"]
+recs = [FASTA.Record(string(i), randdnaseq(10000)) for i in "AB"]
 
 # Compute the squared 2-norm difference and verify it's in [0, 2].
 (comp_a, comp_b) = map(composition, recs)

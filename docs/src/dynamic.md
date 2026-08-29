@@ -115,10 +115,11 @@ julia> AAOligomer{UInt64}([0x61, 0x63])  # From ASCII AbstractVector{UInt8}
 AC
 ```
 
-For extracting a runtime-length window without bounds checks, use the
-five-argument [`unsafe_extract`](@ref) overload. The source range and destination
-capacity must be checked by the caller; symbol validity is still checked during
-recoding.
+For extracting a runtime-length window without bounds checks, use the public
+five-argument [`unsafe_extract`](@ref) overload. Unlike the `Kmer` overload, its
+runtime `len` argument specifies the result length. The source range and
+destination capacity must be checked by the caller; symbol validity is still
+checked during recoding.
 
 ```jldoctest
 julia> source = codeunits("CCTAGCAA");
@@ -205,19 +206,31 @@ TGGCAT
 
 #### Integer Conversion
 Like `Kmer`s, `Oligomer` can be converted to and from integers.
-Unlike the `Kmer` method, length is required when using `from_integer`:
+Unlike the `Kmer` method, length is required when using `from_integer`. The input
+may have a different unsigned integer width from the result's backing type; only
+the low coding bits are used:
 
 ```@docs
 as_integer(::Oligomer)
-from_integer(T::Type{Oligomer{A, U}}, x::U, len::Int) where {A <: Alphabet, U <: Unsigned}
+from_integer(T::Type{Oligomer{A, U}}, x::Unsigned, len::Int) where {A <: Alphabet, U <: Unsigned}
+```
+
+```jldoctest
+julia> original = DNAOligomer{UInt32}("TAGC");
+
+julia> encoded = UInt128(as_integer(original));
+
+julia> from_integer(DNAOligomer{UInt64}, encoded, length(original))
+4nt DNAOligomer{UInt64}:
+TAGC
 ```
 
 ### Type Conversions and Compatibility
 
 #### Between Backing Integer Types
 
-Dynamic kmers can be converted between different backing integer types. Equality is
-only defined for matching backing types, so widen the smaller value before comparing:
+Dynamic kmers can be converted between different backing integer types. Comparisons
+require matching backing types, so widen the smaller value before comparing:
 
 ```jldoctest
 julia> d32 = DNAOligomer{UInt32}("TAGC")
@@ -232,6 +245,27 @@ julia> d64 == DNAOligomer{UInt64}("TAGC")
 true
 ```
 
+#### Comparison Compatibility
+
+Equality, ordering, and `cmp` are defined for `Oligomer`s with the same backing
+integer type and either the same alphabet or compatible DNA/RNA alphabets of the
+same bit width. Compatible DNA and RNA values compare by their shared encoding and
+equal values have equal hashes:
+
+```jldoctest
+julia> dna = DNAOligomer{UInt32}("TAGC"); rna = RNAOligomer{UInt32}("UAGC");
+
+julia> dna == rna
+true
+
+julia> hash(dna) == hash(rna)
+true
+```
+
+Comparing different backing widths, different bits-per-symbol encodings, or an
+`Oligomer` with another `BioSequence` type throws a `MethodError`. Convert both
+values to a common `Oligomer` type first.
+
 #### Translating Dynamic Kmers
 
 Dynamic kmers can be translated to obtain `AAOligomer{U}` with various integer types `U`.
@@ -245,3 +279,12 @@ currently up to `UInt1024`.
 ```@docs
 BioSequences.translate(::Oligomer{<:Union{DNAAlphabet, RNAAlphabet}})
 ```
+
+### Intentional Differences from `Kmer`
+
+The following `Kmer` facilities are intentionally not generalized to `Oligomer`:
+
+* Kmers.jl does not provide `Oligomer`-specific sequence iterators. The existing
+  iterator types produce fixed-length `Kmer`s. However, construction of `Oligomer`
+  from `Kmer` is cheap, so to construct sliding window `Oligomer`, you can do
+  something like `(DNAOligomer{UInt32}(i) for i in FwDNAMers{3}("TAGTGCA"))`.
