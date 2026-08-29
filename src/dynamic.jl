@@ -590,11 +590,94 @@ julia> Kmers.shift_encoding(kmer, enc)
 AGAY
 ```
 """
-function shift_encoding(x::Oligomer{A, U}, encoding::U) where {A <: Alphabet, U <: Unsigned}
+@inline function shift_encoding(
+        x::Oligomer{A, U}, encoding::U
+    ) where {A <: Alphabet, U <: Unsigned}
+    isempty(x) && return x
     mask = length_mask(typeof(x))
     u = x.x & ~mask
-    u = left_shift(u, BioSequences.bits_per_symbol(x))
+    bps = BioSequences.bits_per_symbol(x)
+    iszero(bps) && return x
+    u = left_shift(u, bps)
     u |= left_shift(encoding, noncoding_bits(x))
+    return _new_dynamic_kmer(A, u | (x.x & mask))
+end
+
+"""
+    shift(x::T, s)::T where {T <: Oligomer}
+
+Push `s` onto the end of `x` and discard the first symbol. The alphabet,
+backing integer type, and length are preserved. The argument `s` is converted
+to the element type of `x` before it is encoded.
+
+Shifting an empty `Oligomer` returns it unchanged.
+
+See also: [`shift_first`](@ref), [`push`](@ref)
+
+# Examples
+```jldoctest
+julia> shift(dmer"TACC"d, RNA_A)
+4nt DNAOligomer{UInt64}:
+ACCA
+
+julia> shift(dmer"KWOP"a, 'L')
+4aa AAOligomer{UInt64}:
+WOPL
+```
+"""
+@inline function shift(x::Oligomer{A, U}, s) where {A <: Alphabet, U <: Unsigned}
+    E = eltype(x)
+    symbol = convert(E, s)::E
+    encoding = U(BioSequences.encode(A(), symbol))::U
+    return shift_encoding(x, encoding)
+end
+
+"""
+    shift_first(x::T, s)::T where {T <: Oligomer}
+
+Push `s` onto the start of `x` and discard the last symbol. The alphabet,
+backing integer type, and length are preserved. The argument `s` is converted
+to the element type of `x` before it is encoded.
+
+Shifting an empty `Oligomer` returns it unchanged.
+
+See also: [`shift`](@ref), [`push_first`](@ref)
+
+# Examples
+```jldoctest
+julia> shift_first(dmer"TACC"d, RNA_A)
+4nt DNAOligomer{UInt64}:
+ATAC
+
+julia> shift_first(dmer"KWOP"a, 'L')
+4aa AAOligomer{UInt64}:
+LKWO
+```
+"""
+@inline function shift_first(x::Oligomer{A, U}, s) where {A <: Alphabet, U <: Unsigned}
+    E = eltype(x)
+    symbol = convert(E, s)::E
+    encoding = U(BioSequences.encode(A(), symbol))::U
+    return shift_first_encoding(x, encoding)
+end
+
+"""
+    shift_first_encoding(x::Oligomer{A, U}, encoding::U)::typeof(x)
+
+Add `encoding`, a valid encoding in the alphabet of `x`, to the start of `x`
+and discard its last symbol. It is the caller's responsibility to ensure that
+`encoding` is valid.
+"""
+@inline function shift_first_encoding(
+        x::Oligomer{A, U}, encoding::U
+    ) where {A <: Alphabet, U <: Unsigned}
+    isempty(x) && return x
+    bps = BioSequences.bits_per_symbol(x)
+    iszero(bps) && return x
+    mask = length_mask(typeof(x))
+    u = right_shift(x.x & ~mask, bps)
+    u &= coding_mask(x)
+    u |= left_shift(encoding, 8 * sizeof(U) - bps)
     return _new_dynamic_kmer(A, u | (x.x & mask))
 end
 

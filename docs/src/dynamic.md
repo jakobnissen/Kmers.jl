@@ -154,6 +154,14 @@ TAGC
 julia> push_first(d, DNA_C)  # Add to beginning
 4nt DNAOligomer{UInt64}:
 CTAG
+
+julia> shift(d, RNA_U)  # Append while discarding the first symbol
+3nt DNAOligomer{UInt64}:
+AGT
+
+julia> shift_first(d, RNA_U)  # Prepend while discarding the last symbol
+3nt DNAOligomer{UInt64}:
+TTA
 ```
 
 #### Indexing and Slicing

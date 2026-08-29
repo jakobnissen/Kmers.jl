@@ -618,6 +618,63 @@ end
     @test length(m2) == length(m)
 end
 
+@testset "shift and shift_first" begin
+    cases = Any[
+        (DNAOligomer{UInt8}(dna"TAG"), RNA_C),
+        (RNAOligomer{UInt16}(rna"AUGC"), DNA_T),
+        (Oligomer{DNAAlphabet{4}, UInt32}(dna"TAGN"), RNA_Y),
+        (Oligomer{RNAAlphabet{4}, UInt64}(rna"AUGN"), DNA_Y),
+        (AAOligomer{UInt128}(aa"KWOP"), 'L'),
+        (Oligomer{CharAlphabet, UInt512}("中Å!"), 'Æ'),
+    ]
+
+    for (x, symbol) in cases
+        converted = convert(eltype(x), symbol)
+        expected_last = [collect(x)[2:end]; converted]
+        expected_first = [converted; collect(x)[1:(end - 1)]]
+
+        shifted = @inferred shift(x, symbol)
+        shifted_first = @inferred shift_first(x, symbol)
+        @test typeof(shifted) === typeof(x)
+        @test typeof(shifted_first) === typeof(x)
+        @test length(shifted) == length(x)
+        @test length(shifted_first) == length(x)
+        @test collect(shifted) == expected_last
+        @test collect(shifted_first) == expected_first
+
+        U = Kmers.utype(typeof(x))
+        encoding = U(BioSequences.encode(Alphabet(x), converted))
+        @test @inferred(Kmers.shift_encoding(x, encoding)) === shifted
+        @test @inferred(Kmers.shift_first_encoding(x, encoding)) === shifted_first
+    end
+
+    for T in (
+            DNAOligomer{UInt8},
+            RNAOligomer{UInt64},
+            Oligomer{DNAAlphabet{4}, UInt128},
+            Oligomer{RNAAlphabet{4}, UInt256},
+            AAOligomer{UInt512},
+            Oligomer{CharAlphabet, UInt512},
+        )
+        x = empty(T)
+        symbol = first(symbols(Alphabet(T)))
+        encoding = Kmers.utype(T)(BioSequences.encode(Alphabet(T), symbol))
+        @test @inferred(shift(x, symbol)) === x
+        @test @inferred(shift_first(x, symbol)) === x
+        @test @inferred(Kmers.shift_encoding(x, encoding)) === x
+        @test @inferred(Kmers.shift_first_encoding(x, encoding)) === x
+    end
+
+    long_sequence = dna"TAGC"^100
+    large = DNAOligomer{UInt1024}(long_sequence)
+    @test @inferred(shift(large, DNA_A)) == DNAOligomer{UInt1024}(
+        [collect(long_sequence)[2:end]; DNA_A]
+    )
+    @test @inferred(shift_first(large, DNA_A)) == DNAOligomer{UInt1024}(
+        [DNA_A; collect(long_sequence)[1:(end - 1)]]
+    )
+end
+
 @testset "Mixed integer types" begin
     for U in [UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, UInt512]
         s = dna"TAG"
