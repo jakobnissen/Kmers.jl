@@ -339,6 +339,8 @@ function Kmers.from_integer(
         error("Length too large for dynamic kmer")
     end
     bps = BioSequences.bits_per_symbol(A())
+    iszero(bps) && return _new_dynamic_kmer(A, len % U)
+    iszero(len) && return _new_dynamic_kmer(A, zero(U))
     shift = 8 * sizeof(U) - len * bps
     u = left_shift(x, shift)
     return _new_dynamic_kmer(A, u | (len % U))
@@ -413,37 +415,22 @@ end
     bps = BioSequences.bits_per_symbol(A)
     # If no BPS, binary representation of dynamic kmer is no coding bits,
     # and then simply the length in the lower bits.
-    if iszero(bps)
-        _new_dynamic_kmer(typeof(A), len % U)
-    end
-
-    if isempty(x)
-        return _new_dynamic_kmer(typeof(A), zero(U))
-    end
+    iszero(bps) && return _new_dynamic_kmer(typeof(A), len % U)
+    isempty(x) &&return _new_dynamic_kmer(typeof(A), zero(U))
     tup = BioSequences.encoded_data(x)
     # Tuple length has to be at least one, since otherwise kmer would be empty,
     # and branch above would have been taken
-    u = if length(tup) == 1
-        tup[1] % U
-    else
-        # Here, we know the tuple has at least 2 elements, so the kmer is at least
-        # 128 bits.
-        # We checked above that the kmer fits in T, so utype(T) must have at least 128
-        # bits, and the utype(T) can contain all bits in the tuple
-        # Note also that Kmers.jl only loads on little-endian 64-bit systems,
-        # so we can assume those things, too.
-        u = zero(utype(T))
-        shift = 8 * sizeof(u) - 64
-        for i in tup
-            u |= left_shift(i % U, shift)
-            shift -= 64
-        end
-        u
-    end
 
-    # Kmers keep thier coding bits in the lowest part of the data,
-    # and dynamic kmers in the upper.
-    u = left_shift(u, bits_unused(typeof(x)))
+    # Kmers store the partially filled head word in its lower bits, whereas an
+    # Oligomer stores all coding bits at the top of its backing integer. Align
+    # the head word relative to the target width, rather than the source UInt
+    # width, so this also works when U is wider than UInt.
+    u = zero(U)
+    shift = 8 * sizeof(U) - (64 - bits_unused(typeof(x)))
+    for word in tup
+        u |= left_shift(word % U, shift)
+        shift -= 64
+    end
 
     # Add in length
     u |= len % U
@@ -528,7 +515,7 @@ end
 # or error if `x` does not fit in that type.
 function narrow_to(T::Type{<:Unsigned}, x::Oligomer{A, U}) where {A, U}
     newT = Oligomer{A, T}
-    if max_coding_bits(newT) < length(x)
+    if length(x) > capacity(newT)
         error("Dynamic Kmer do not fit into integer size")
     end
     # Remove length from encoding
@@ -661,14 +648,14 @@ ERROR: BoundsError: attempt to access AAOligomer{UInt64} at index [8]
 function push(x::Oligomer{A, U}, s) where {A, U}
     T = typeof(x)
 
-    # Update new length. Since length is stored in bottom bits,
-    # we can simply add it directly. Neat!
-    u = x.x + 0x01
-    new_len = (u & length_mask(T)) % Int
-
-    @boundscheck if new_len > capacity(T)
+    len = length(x)
+    @boundscheck if len >= capacity(T)
         boundserror(x, capacity(T) + 1)
     end
+    new_len = len + 1
+
+    # Update the packed length only after its logical value has been validated.
+    u = x.x + one(U)
 
     E = eltype(x)
     sT = convert(E, s)::E
@@ -715,14 +702,11 @@ ERROR: BoundsError: attempt to access AAOligomer{UInt64} at index [8]
 function push_first(x::Oligomer{A, U}, s) where {A, U}
     T = typeof(x)
 
-    # Update new length. Since length is stored in bottom bits,
-    # we can simply add it directly. Neat!
-    u = x.x + 0x01
-    new_len = (u & length_mask(T)) % Int
-
-    @boundscheck if new_len > capacity(T)
+    len = length(x)
+    @boundscheck if len >= capacity(T)
         boundserror(x, capacity(T) + 1)
     end
+    new_len = len + 1
 
 
     E = eltype(x)

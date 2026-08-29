@@ -86,6 +86,25 @@ using BitIntegers
         end
     end
 
+    @testset "From Kmer into wider backing types" begin
+        for U in [UInt128, UInt256, UInt512]
+            # One symbol, a partially filled word, and a full source word.
+            for s in [dna"T", dna"TAG", dna"T"^32]
+                kmer = DNAKmer{length(s)}(s)
+                oligomer = DNAOligomer{U}(kmer)
+                @test string(oligomer) == string(kmer)
+                @test DNAKmer{length(s)}(oligomer) == kmer
+            end
+
+            # Keep a multiword source case covered too.
+            s = dna"T"^33
+            kmer = DNAKmer{33}(s)
+            oligomer = DNAOligomer{U}(kmer)
+            @test string(oligomer) == string(kmer)
+            @test DNAKmer{33}(oligomer) == kmer
+        end
+    end
+
     @testset "From Oligomer" begin
         # Same backing type, same alphabet
         s = dna"TAGCTGA"
@@ -142,6 +161,25 @@ using BitIntegers
         d_4bit_64 = Oligomer{DNAAlphabet{4}, UInt64}(d_4bit_32)
         @test d_4bit_64 == d_4bit_32
         @test length(d_4bit_64) == length(d_4bit_32)
+
+        # Narrowing must compare symbol capacities, not coding bits with symbols.
+        for (source, target, fitting, overflowing) in [
+                (DNAOligomer{UInt16}, DNAOligomer{UInt8}, dna"TAG", dna"TAGC"),
+                (RNAOligomer{UInt16}, RNAOligomer{UInt8}, rna"UAG", rna"UAGC"),
+            ]
+            original = source(fitting)
+            narrowed = target(original)
+            @test string(narrowed) == string(original)
+            @test length(narrowed) == length(original)
+            @test narrowed == original
+            @test_throws Exception target(source(overflowing))
+        end
+
+        # AAOligomer{UInt8} has capacity zero, exercising the smallest target
+        # backing type too.
+        empty_aa = AAOligomer{UInt16}(aa"")
+        @test AAOligomer{UInt8}(empty_aa) == empty_aa
+        @test_throws Exception AAOligomer{UInt8}(AAOligomer{UInt16}(aa"K"))
     end
 
     @testset "To Kmer" begin
@@ -324,6 +362,19 @@ end
 
         # Error on exceeding capacity
         @test_throws Exception from_integer(DNAOligomer{UInt32}, UInt32(0), 30)
+
+        # A zero-length value must discard every input bit, including inputs
+        # which would otherwise wrap a full-width shift to a zero-bit shift.
+        for U in [UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, UInt512]
+            T = DNAOligomer{U}
+            for value in [zero(U), one(U), typemax(U)]
+                oligomer = from_integer(T, value, 0)
+                @test length(oligomer) == 0
+                @test isempty(oligomer)
+                @test oligomer == empty(T)
+                @test oligomer.x == zero(U)
+            end
+        end
     end
 
     @testset "Round-trip conversion" begin
@@ -586,6 +637,20 @@ end
     @test_throws BoundsError push(aa32_full, AA_L)
     @test_throws BoundsError push_first(aa32_full, AA_M)
 
+    # UInt8 has just enough length bits for a full 2-bit oligomer. Incrementing
+    # its packed representation first would wrap the length and corrupt it.
+    for (T, sequence, symbol) in [
+            (DNAOligomer{UInt8}, dna"TAG", DNA_A),
+            (RNAOligomer{UInt8}, rna"UAG", RNA_U),
+        ]
+        full = T(sequence)
+        original = full.x
+        @test length(full) == capacity(T)
+        @test_throws BoundsError push(full, symbol)
+        @test_throws BoundsError push_first(full, symbol)
+        @test full.x == original
+    end
+
     # Verify we can push to capacity-1 without error
     d_almost_full = DNAOligomer{UInt64}(dna"T"^28)
     @test length(push(d_almost_full, DNA_A)) == 29
@@ -692,6 +757,14 @@ end
     @test capacity(Oligomer{ZeroBPSAlphabet, UInt8}) == clamp(typemax(UInt8), Int)
     @test capacity(Oligomer{ZeroBPSAlphabet, UInt32}) == clamp(typemax(UInt32), Int)
     @test capacity(Oligomer{ZeroBPSAlphabet, UInt128}) == typemax(Int)
+
+    # Zero-BPS values have no coding bits, so from_integer must retain only the
+    # requested length regardless of its integer input.
+    zero_bps_type = Oligomer{ZeroBPSAlphabet, UInt8}
+    for value in [zero(UInt8), one(UInt8), typemax(UInt8)]
+        @test from_integer(zero_bps_type, value, 0).x == 0x00
+    end
+    @test from_integer(zero_bps_type, typemax(UInt8), 1).x == 0x01
 
     # Test non-zero BPS: capacity should be in range 0:div(8 * sizeof(U), B)
     for (A, bps) in [(DNAAlphabet{2}, 2), (DNAAlphabet{4}, 4), (AminoAcidAlphabet, 8)]
