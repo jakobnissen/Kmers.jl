@@ -311,6 +311,124 @@ end
     ) === empty(generic_type)
 end
 
+@testset "Packed unsafe runtime-length extraction" begin
+    unsafe_extract = Kmers.unsafe_extract
+
+    function compare_packed_extract(recoding, T, source, from, len)
+        @test unsafe_extract(recoding, T, source, from, len) ==
+            Kmers.extract_elements(recoding, T, source, from, len)
+    end
+
+    source_2bit = LongDNA{2}(repeat("ACGT", 100))
+    source_4bit = LongDNA{4}(repeat("ACGT", 100))
+    for U in (UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, UInt512),
+            (recoding, A, source) in (
+                (Kmers.Copyable(), DNAAlphabet{2}, source_2bit),
+                (Kmers.TwoToFour(), DNAAlphabet{4}, source_2bit),
+                (Kmers.FourToTwo(), DNAAlphabet{2}, source_4bit),
+            )
+        T = Oligomer{A, U}
+        for len in (0, 1, min(3, capacity(T)), capacity(T)), from in (1, 2, 3, 31, 32)
+            (len <= capacity(T) && from + len - 1 <= length(source)) || continue
+            compare_packed_extract(recoding, T, source, from, len)
+        end
+    end
+
+    # Exercise copyable packed extraction with non-nucleic and one-bit alphabets.
+    for (A, source) in (
+                (AminoAcidAlphabet, LongAA(repeat("ARNDCQEGHILKMFPSTWYV", 20))),
+                (
+                    OneBPSAlphabet,
+                    LongSequence{OneBPSAlphabet}(repeat([DNA_A, DNA_C], 200)),
+                ),
+            ), U in (UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, UInt512)
+        T = Oligomer{A, U}
+        for len in (0, 1, min(3, capacity(T)), capacity(T)), from in (1, 2, 31, 32)
+            from + len - 1 <= length(source) || continue
+            compare_packed_extract(Kmers.Copyable(), T, source, from, len)
+        end
+    end
+
+    # DNA and RNA with the same bit width can take the direct-copy path.
+    compare_packed_extract(
+        Kmers.Copyable(),
+        RNAOligomer{UInt128},
+        source_2bit,
+        2,
+        33,
+    )
+
+    # LongSubSeq preserves its data offset, including across physical-word boundaries.
+    source_2bit_view = view(source_2bit, 2:300)
+    source_4bit_view = view(source_4bit, 2:300)
+    for len in (0, 1, 16, 17, 32, 33), from in (1, 2, 31, 32)
+        if len <= capacity(DNAOligomer{UInt128})
+            compare_packed_extract(
+                Kmers.Copyable(),
+                DNAOligomer{UInt128},
+                source_2bit_view,
+                from,
+                len,
+            )
+            compare_packed_extract(
+                Kmers.FourToTwo(),
+                DNAOligomer{UInt128},
+                source_4bit_view,
+                from,
+                len,
+            )
+        end
+        if len <= capacity(Oligomer{DNAAlphabet{4}, UInt128})
+            compare_packed_extract(
+                Kmers.TwoToFour(),
+                Oligomer{DNAAlphabet{4}, UInt128},
+                source_2bit_view,
+                from,
+                len,
+            )
+        end
+    end
+
+    function extract_error(f)
+        try
+            f()
+        catch error
+            return error
+        end
+        error("Expected unsafe_extract to throw")
+    end
+
+    # The packed certainty check is range-local and reports the first uncertain
+    # or gap symbol in the rejected chunk.
+    for (position, symbol) in ((1, 'N'), (17, '-'), (33, 'N'))
+        chars = fill('A', 33)
+        chars[position] = symbol
+        source = LongDNA{4}(String(chars))
+        error = extract_error() do
+            unsafe_extract(Kmers.FourToTwo(), DNAOligomer{UInt128}, source, 1, 33)
+        end
+        @test error isa BioSequences.EncodeError
+        @test error.val == source[position]
+    end
+    outside_range = LongDNA{4}("N" * repeat("ACGT", 8) * "N")
+    @test unsafe_extract(Kmers.FourToTwo(), DNAOligomer{UInt128}, outside_range, 2, 32) ==
+        Kmers.extract_elements(Kmers.FourToTwo(), DNAOligomer{UInt128}, outside_range, 2, 32)
+
+    function packed_extract_allocations(source_2bit, source_4bit)
+        two_bit_type = DNAOligomer{UInt128}
+        four_bit_type = Oligomer{DNAAlphabet{4}, UInt128}
+        unsafe_extract(Kmers.Copyable(), two_bit_type, source_2bit, 2, 33)
+        unsafe_extract(Kmers.TwoToFour(), four_bit_type, source_2bit, 2, 17)
+        unsafe_extract(Kmers.FourToTwo(), two_bit_type, source_4bit, 2, 33)
+        return (
+            @allocated(unsafe_extract(Kmers.Copyable(), two_bit_type, source_2bit, 2, 33)),
+            @allocated(unsafe_extract(Kmers.TwoToFour(), four_bit_type, source_2bit, 2, 17)),
+            @allocated(unsafe_extract(Kmers.FourToTwo(), two_bit_type, source_4bit, 2, 33)),
+        )
+    end
+    @test all(iszero, packed_extract_allocations(source_2bit, source_4bit))
+end
+
 @testset "Indexing and iteration" begin
     @testset "Scalar indexing" begin
         m = dmer"TAGCTGAC"d
@@ -995,6 +1113,24 @@ end
     @test length(zero_bps_kmer) == 4
     @test zero_bps_kmer.data === ()
     @test Oligomer{ZeroBPSAlphabet, UInt8}(symbols) === zero_bps
+
+    # Packed extraction must not read source storage for a zero-BPS alphabet.
+    zero_bps_source = LongSequence{ZeroBPSAlphabet}(UInt64[], UInt(4))
+    @test Kmers.extract_packed(
+        Kmers.Copyable(),
+        typeof(zero_bps_kmer),
+        zero_bps_source,
+        1,
+        BioSequences.BitsPerSymbol{0}(),
+    ) === zero_bps_kmer
+    @test Kmers.extract_packed(
+        Kmers.Copyable(),
+        zero_bps_type,
+        zero_bps_source,
+        1,
+        4,
+        BioSequences.BitsPerSymbol{0}(),
+    ) === zero_bps
     @test @inferred(
         Kmers.unsafe_extract(Kmers.GenericRecoding(), zero_bps_type, symbols, 1, 4)
     ) === zero_bps

@@ -429,102 +429,170 @@ end
 # Unsafe extract
 ################################################
 
-@inline function unsafe_extract(
-        recoding::TwoToFour,
+@inline function extract_elements(
+        recoding::RecodingScheme,
         ::Type{T},
-        source::BioSequence,
+        source,
         from::Int,
         len::Int,
     ) where {A, U, T <: Oligomer{A, U}}
     u = zero(U)
     alphabet = A()
-    i = 0
-    while i < len
-        encoding = _recode_element(recoding, alphabet, source, from + i, U)
-        u = left_shift(u, 4) | encoding
-        i += 1
+    bps = BioSequences.bits_per_symbol(alphabet)
+    for i in 0:(len - 1)
+        encoding = recode_element(recoding, alphabet, source, from + i, U)
+        u = left_shift(u, bps) | encoding
     end
-    u = left_shift(u, 8 * sizeof(U) - 4 * len)
+    u = left_shift(u, 8 * sizeof(U) - bps * len)
     return _new_dynamic_kmer(A, u | (len % U))
 end
 
 @inline function unsafe_extract(
-        recoding::FourToTwo,
+        recoding::RecodingScheme,
         ::Type{T},
-        source::BioSequence,
+        source,
         from::Int,
         len::Int,
     ) where {A, U, T <: Oligomer{A, U}}
-    u = zero(U)
-    alphabet = A()
-    i = 0
-    while i < len
-        encoding = _recode_element(recoding, alphabet, source, from + i, U)
-        u = left_shift(u, 2) | encoding
-        i += 1
+    return extract_elements(recoding, T, source, from, len)
+end
+
+@inline function packed_bits(
+        ::Copyable,
+        ::Type{U},
+        ::Alphabet,
+        source::BioSequences.SeqOrView,
+        from::Int,
+        len::Int,
+    ) where {U <: Unsigned}
+    bps = BioSequences.BitsPerSymbol(source)
+    if sizeof(U) <= sizeof(UInt64)
+        return load_packed_bits(UInt64, source, from, len, bps) % U
     end
-    u = left_shift(u, 8 * sizeof(U) - 2 * len)
+    return load_packed_bits(U, source, from, len, bps)
+end
+
+@inline function packed_bits(
+        ::TwoToFour,
+        ::Type{U},
+        ::Alphabet,
+        source::BioSequences.SeqOrView{<:NucleicAcidAlphabet{2}},
+        from::Int,
+        len::Int,
+    ) where {U <: Unsigned}
+    bits = zero(U)
+    offset = 0
+    while offset < len
+        chunk_len = min(16, len - offset)
+        chunk = load_packed_bits(
+            UInt64,
+            source,
+            from + offset,
+            chunk_len,
+            BioSequences.BitsPerSymbol{2}(),
+        )
+        encoding = BioSequences.two_to_four_bits(chunk % UInt32) &
+            BioSequences.bitmask(UInt64, 4 * chunk_len)
+        bits |= left_shift(encoding % U, 4 * offset)
+        offset += chunk_len
+    end
+    return bits
+end
+
+@inline function packed_bits(
+        ::FourToTwo,
+        ::Type{U},
+        alphabet::Alphabet,
+        source::BioSequences.SeqOrView{<:NucleicAcidAlphabet{4}},
+        from::Int,
+        len::Int,
+    ) where {U <: Unsigned}
+    bits = zero(U)
+    offset = 0
+    while offset < len
+        chunk_len = min(16, len - offset)
+        encoding = four_to_two_half(alphabet, source, from + offset, chunk_len)
+        bits |= left_shift(encoding % U, 2 * offset)
+        offset += chunk_len
+    end
+    return bits
+end
+
+@inline function reverse_packed_bits(bits::Unsigned, bps::BioSequences.BitsPerSymbol)
+    return BioSequences.reversebits(bits, bps)
+end
+
+# BioSequences delegates one-bit reversal to `bitreverse`, which does not support
+# wide BitIntegers. Reverse those one UInt64 at a time instead.
+@inline function reverse_packed_bits(
+        bits::U,
+        ::BioSequences.BitsPerSymbol{1},
+    ) where {U <: Unsigned}
+    if sizeof(U) <= sizeof(UInt64)
+        shift = 8 * (sizeof(UInt64) - sizeof(U))
+        return right_shift(Base.bitreverse(bits % UInt64), shift) % U
+    end
+
+    width = 8 * sizeof(U)
+    reversed = zero(U)
+    for offset in 0:64:(width - 1)
+        nbits = min(64, width - offset)
+        chunk = right_shift(bits, offset) % UInt64
+        chunk = right_shift(Base.bitreverse(chunk), 64 - nbits)
+        reversed |= left_shift(chunk % U, width - offset - nbits)
+    end
+    return reversed
+end
+
+@inline function extract_packed(
+        recoding::Union{Copyable, TwoToFour, FourToTwo},
+        ::Type{T},
+        source::BioSequences.SeqOrView,
+        from::Int,
+        len::Int,
+        bps::BioSequences.BitsPerSymbol{B},
+    ) where {A, U, T <: Oligomer{A, U}, B}
+    iszero(B) && return _new_dynamic_kmer(A, len % U)
+    iszero(len) && return _new_dynamic_kmer(A, zero(U))
+
+    alphabet = A()
+    bits = packed_bits(recoding, U, alphabet, source, from, len)
+    u = reverse_packed_bits(bits, bps)
     return _new_dynamic_kmer(A, u | (len % U))
 end
 
 @inline function unsafe_extract(
         recoding::Copyable,
         ::Type{T},
-        source::BioSequence,
+        source::BioSequences.SeqOrView,
         from::Int,
         len::Int,
     ) where {A, U, T <: Oligomer{A, U}}
-    alphabet = A()
-    bps = BioSequences.bits_per_symbol(alphabet)
-    u = zero(U)
-    i = 0
-    while i < len
-        encoding = _recode_element(recoding, alphabet, source, from + i, U)
-        u = left_shift(u, bps) | encoding
-        i += 1
+    bps = BioSequences.BitsPerSymbol(A())
+    if bps == BioSequences.BitsPerSymbol(source) && !iszero(BioSequences.bits_per_symbol(bps))
+        return extract_packed(recoding, T, source, from, len, bps)
     end
-    u = left_shift(u, 8 * sizeof(U) - bps * len)
-    return _new_dynamic_kmer(A, u | (len % U))
+    return extract_elements(recoding, T, source, from, len)
 end
 
 @inline function unsafe_extract(
-        recoding::AsciiEncode,
+        recoding::TwoToFour,
         ::Type{T},
-        source::AbstractVector{UInt8},
+        source::BioSequences.SeqOrView{<:NucleicAcidAlphabet{2}},
         from::Int,
         len::Int,
-    ) where {A, U, T <: Oligomer{A, U}}
-    alphabet = A()
-    bps = BioSequences.bits_per_symbol(alphabet)
-    u = zero(U)
-    i = 0
-    while i < len
-        encoding = _recode_element(recoding, alphabet, source, from + i, U)
-        u = left_shift(u, bps) | encoding
-        i += 1
-    end
-    u = left_shift(u, 8 * sizeof(U) - bps * len)
-    return _new_dynamic_kmer(A, u | (len % U))
+    ) where {A <: NucleicAcidAlphabet{4}, U, T <: Oligomer{A, U}}
+    return extract_packed(recoding, T, source, from, len, BioSequences.BitsPerSymbol(A()))
 end
 
 @inline function unsafe_extract(
-        recoding::GenericRecoding,
+        recoding::FourToTwo,
         ::Type{T},
-        source,
+        source::BioSequences.SeqOrView{<:NucleicAcidAlphabet{4}},
         from::Int,
         len::Int,
-    ) where {A, U, T <: Oligomer{A, U}}
-    alphabet = A()
-    bps = BioSequences.bits_per_symbol(alphabet)
-    u = zero(U)
-    i = 0
-    while i < len
-        encoding = _recode_element(recoding, alphabet, source, from + i, U)
-        u = left_shift(u, bps) | encoding
-        i += 1
-    end
-    u = left_shift(u, 8 * sizeof(U) - bps * len)
-    return _new_dynamic_kmer(A, u | (len % U))
+    ) where {A <: NucleicAcidAlphabet{2}, U, T <: Oligomer{A, U}}
+    return extract_packed(recoding, T, source, from, len, BioSequences.BitsPerSymbol(A()))
 end
 
 ## More construction utils
@@ -546,7 +614,7 @@ function Oligomer{T1}(x::Oligomer{T2}) where {
 end
 
 # Constructor dispatches to RecodingScheme
-function Oligomer{A, U}(x) where {A <: Alphabet, U <: Unsigned}
+@inline function Oligomer{A, U}(x) where {A <: Alphabet, U <: Unsigned}
     return build_dynamic_kmer(RecodingScheme(A(), typeof(x)), Oligomer{A, U}, x)
 end
 

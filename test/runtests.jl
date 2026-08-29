@@ -79,6 +79,13 @@ BioSequences.encode(::CharAlphabet, c::CharSymbol) = reinterpret(UInt32, c.x) % 
 BioSequences.decode(::CharAlphabet, c::Unsigned) = CharSymbol(reinterpret(Char, c % UInt32))
 BioSequences.BitsPerSymbol(::CharAlphabet) = BioSequences.BitsPerSymbol{32}()
 
+struct OneBPSAlphabet <: Alphabet end
+Base.eltype(::Type{OneBPSAlphabet}) = DNA
+BioSequences.symbols(::OneBPSAlphabet) = (DNA_A, DNA_C)
+BioSequences.encode(::OneBPSAlphabet, x::DNA) = x === DNA_A ? zero(UInt) : one(UInt)
+BioSequences.decode(::OneBPSAlphabet, x::Unsigned) = iszero(x) ? DNA_A : DNA_C
+BioSequences.BitsPerSymbol(::OneBPSAlphabet) = BioSequences.BitsPerSymbol{1}()
+
 struct GenericNucAlphabet <: NucleicAcidAlphabet{8} end
 Base.eltype(::Type{GenericNucAlphabet}) = DNA
 BioSequences.symbols(::GenericNucAlphabet) = symbols(DNAAlphabet{4}())
@@ -982,6 +989,93 @@ end
             unsafe_extract(Kmers.GenericRecoding(), Kmer{CharAlphabet, 3, 2}, seq, 4)
         ) ==
             Kmer{CharAlphabet, 3}("Å!人")
+    end
+
+    @testset "Packed unsafe extract" begin
+        unsafe_extract = Kmers.unsafe_extract
+
+        function compare_packed_extract(recoding, T, source, from)
+            @test unsafe_extract(recoding, T, source, from) ==
+                Kmers.extract_elements(recoding, T, source, from)
+        end
+
+        source_2bit = LongDNA{2}(repeat("ACGT", 100))
+        source_4bit = LongDNA{4}(repeat("ACGT", 100))
+        for K in (0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65), from in (1, 2, 3, 31, 32)
+            from + K - 1 <= length(source_2bit) || continue
+            two_bit_type = derive_type(Kmer{DNAAlphabet{2}, K})
+            four_bit_type = derive_type(Kmer{DNAAlphabet{4}, K})
+            compare_packed_extract(Kmers.Copyable(), two_bit_type, source_2bit, from)
+            compare_packed_extract(Kmers.TwoToFour(), four_bit_type, source_2bit, from)
+            compare_packed_extract(Kmers.FourToTwo(), two_bit_type, source_4bit, from)
+        end
+
+        # DNA and RNA with the same bit width share their packed encoding.
+        compare_packed_extract(
+            Kmers.Copyable(),
+            derive_type(Kmer{RNAAlphabet{2}, 33}),
+            source_2bit,
+            2,
+        )
+
+        # Copyable alphabets are not limited to nucleic acids.
+        aa_source = LongAA(repeat("ARNDCQEGHILKMFPSTWYV", 20))
+        for K in (0, 1, 7, 8, 9, 15, 16, 17), from in (1, 2, 7, 8, 9)
+            from + K - 1 <= length(aa_source) || continue
+            compare_packed_extract(
+                Kmers.Copyable(),
+                derive_type(Kmer{AminoAcidAlphabet, K}),
+                aa_source,
+                from,
+            )
+        end
+
+        # One-bit alphabets use bit reversal rather than field-wise reversal.
+        one_bit_source = LongSequence{OneBPSAlphabet}(repeat([DNA_A, DNA_C], 200))
+        for K in (0, 1, 31, 32, 63, 64, 65), from in (1, 2, 31, 32)
+            from + K - 1 <= length(one_bit_source) || continue
+            compare_packed_extract(
+                Kmers.Copyable(),
+                derive_type(Kmer{OneBPSAlphabet, K}),
+                one_bit_source,
+                from,
+            )
+        end
+
+        # Views exercise source word offsets independently of the extraction offset.
+        source_2bit_view = view(source_2bit, 2:300)
+        source_4bit_view = view(source_4bit, 2:300)
+        for K in (1, 16, 17, 32, 33, 64), from in (1, 2, 31, 32)
+            two_bit_type = derive_type(Kmer{DNAAlphabet{2}, K})
+            four_bit_type = derive_type(Kmer{DNAAlphabet{4}, K})
+            compare_packed_extract(Kmers.Copyable(), two_bit_type, source_2bit_view, from)
+            compare_packed_extract(Kmers.TwoToFour(), four_bit_type, source_2bit_view, from)
+            compare_packed_extract(Kmers.FourToTwo(), two_bit_type, source_4bit_view, from)
+        end
+
+        # Empty extractions do not touch the source storage.
+        empty_source = LongDNA{2}("")
+        @test isempty(unsafe_extract(Kmers.Copyable(), DNAKmer{0, 0}, empty_source, 1))
+
+        # SeqOrView specializations do not replace the generic BioSequence fallback.
+        oligomer_source = DNAOligomer{UInt128}(source_2bit[1:32])
+        oligomer_type = DNAKmer{17, 1}
+        @test unsafe_extract(Kmers.Copyable(), oligomer_type, oligomer_source, 3) ==
+            oligomer_type(oligomer_source[3:19])
+
+        function packed_extract_allocations(source_2bit, source_4bit)
+            two_bit_type = DNAKmer{33, 2}
+            four_bit_type = Kmer{DNAAlphabet{4}, 17, 2}
+            unsafe_extract(Kmers.Copyable(), two_bit_type, source_2bit, 2)
+            unsafe_extract(Kmers.TwoToFour(), four_bit_type, source_2bit, 2)
+            unsafe_extract(Kmers.FourToTwo(), two_bit_type, source_4bit, 2)
+            return (
+                @allocated(unsafe_extract(Kmers.Copyable(), two_bit_type, source_2bit, 2)),
+                @allocated(unsafe_extract(Kmers.TwoToFour(), four_bit_type, source_2bit, 2)),
+                @allocated(unsafe_extract(Kmers.FourToTwo(), two_bit_type, source_4bit, 2)),
+            )
+        end
+        @test all(iszero, packed_extract_allocations(source_2bit, source_4bit))
     end
 
     @testset "Unsafe shift from" begin
