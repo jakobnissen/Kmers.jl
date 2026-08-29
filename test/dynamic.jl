@@ -840,10 +840,18 @@ end
     # Edge cases
     @testset "Edge cases" begin
         # Empty sequence (length 0 is divisible by 3, produces 0 AA)
-        @test translate(dmer""d) == dmer""a
-        @test translate(dmer""r) == dmer""a
-        @test translate(DNAOligomer{UInt32}(dna"")) == dmer""a
-        @test translate(Oligomer{DNAAlphabet{4}, UInt64}(dna"")) == dmer""a
+        for A in (DNAAlphabet{2}, RNAAlphabet{2}, DNAAlphabet{4}, RNAAlphabet{4}),
+                U in (UInt8, UInt32), alternative_start in (false, true)
+            input = Oligomer{A, U}("")
+            result = translate(input; alternative_start)
+            empty_result = empty(typeof(result))
+            @test length(result) == 0
+            @test isempty(result)
+            @test result == empty_result
+            @test hash(result) == hash(empty_result)
+            @test string(result) == ""
+            @test result.x == zero(result.x)
+        end
 
         # Very long sequence (near capacity) - 2-bit
         # For UInt64 with 2-bit DNA, capacity is 31, so 30 nt = 10 AA

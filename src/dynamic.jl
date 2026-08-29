@@ -913,7 +913,7 @@ function BioSequences.translate(
 
     # If alternative_start, we manually add the AA_M (encoding 0x0c)
     # to the data at the top bits
-    if alternative_start
+    if alternative_start && !iszero(aalen)
         u |= left_shift(0x0c % U, 8 * sizeof(U) - 8)
     end
 
