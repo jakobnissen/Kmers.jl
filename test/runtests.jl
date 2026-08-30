@@ -138,7 +138,8 @@ const ALPHABETS = [
     @testset "Bad parameters" begin
         @test_throws Exception Kmer{DNAAlphabet, :foo, 1}("C")
         @test_throws Exception Kmer{DNAAlphabet, -1, 0}("")
-        @test_throws Exception Kmer{DNAAlphabet, 1, 2}("A")
+        @test_throws ArgumentError Kmer{DNAAlphabet{2}, 1, :foo}("A")
+        @test_throws ArgumentError Kmer{DNAAlphabet{2}, 1, 2}("A")
     end
 
     @testset "Construct from string" begin
@@ -801,6 +802,8 @@ end
                 end
             end
         end
+
+        @test_throws BioSequences.EncodeError collect(FwRvIterator{DNAAlphabet{2}, 3}("TAGP"))
     end
 
     @testset "CanonicalKmers" begin
@@ -1097,6 +1100,9 @@ end
         seq = codeunits(String(seq))
         mer = mer"KWPLCVAKVM"a
         @test ushift(Kmers.AsciiEncode(), mer, seq, 5, Val(4)) == mer"CVAKVMTAGG"a
+        @test_throws BioSequences.EncodeError ushift(
+            Kmers.AsciiEncode(), mer"TAG"d, codeunits("P"), 1, Val(1)
+        )
 
         seq = LongSequence{CharAlphabet}("中国¨Å!人大æ网")
         mer = Kmer{CharAlphabet, 5, 3}("中国¨Å!")

@@ -26,6 +26,7 @@ using BitIntegers
         @test dmer"ATGTCGTTAGT"d == DNAOligomer{UInt64}(dna"ATGTCGTTAGT")
         @test dmer"AUGUCGAGUGUAUGC"r == RNAOligomer{UInt64}(rna"AUGUCGAGUGUAUGC")
         @test dmer"KWOP"a == AAOligomer{UInt64}(aa"KWOP")
+        @test_throws Exception eval(:(dmer"ATCGATAG"k))
 
         d = DNAOligomer{UInt}(dna"ATGTCGTTAGT")
         @test RNAOligomer(d) == d
@@ -1170,6 +1171,14 @@ end
 end
 
 @testset "translate" begin
+    @testset "Output backing type" begin
+        @test typeof(translate(DNAOligomer{UInt8}(dna"ATG"))) === AAOligomer{UInt16}
+        @test typeof(translate(DNAOligomer{UInt16}(dna"ATG"))) === AAOligomer{UInt32}
+        @test typeof(translate(DNAOligomer{UInt32}(dna"ATG"))) === AAOligomer{UInt64}
+        @test typeof(translate(DNAOligomer{UInt64}(dna"ATG"))) === AAOligomer{UInt128}
+        @test typeof(translate(DNAOligomer{UInt128}(dna"ATG"))) === AAOligomer{UInt256}
+    end
+
     # Basic translation - 2-bit alphabets
     @testset "Basic 2-bit" begin
         # DNA 2-bit with different backing types
