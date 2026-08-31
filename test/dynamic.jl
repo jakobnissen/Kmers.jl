@@ -1168,6 +1168,15 @@ end
     @test capacity(AAOligomer{UInt32}) <= capacity(AAOligomer{UInt64})
     @test capacity(DNAOligomer{UInt64}) <= capacity(DNAOligomer{UInt256})
     @test capacity(AAOligomer{UInt128}) <= capacity(AAOligomer{UInt512})
+
+    # Instances forward to their concrete type's capacity.
+    for oligomer in (
+            DNAOligomer{UInt8}("TAG"),
+            Oligomer{DNAAlphabet{4}, UInt32}("TAGN"),
+            AAOligomer{UInt64}("WPK"),
+        )
+        @test @inferred(capacity(oligomer)) == capacity(typeof(oligomer))
+    end
 end
 
 @testset "translate" begin
@@ -1333,4 +1342,12 @@ end
 @testset "Misc" begin
     d = AAOligomer{UInt32}("WPK")
     @test only([d]') === d
+end
+
+@testset "Random extended-width Oligomers" begin
+    for T in (DNAOligomer{UInt256}, Oligomer{DNAAlphabet{4}, UInt512})
+        oligomer = @inferred rand(StableRNG(SEED), T, capacity(T))
+        @test typeof(oligomer) === T
+        @test length(oligomer) == capacity(T)
+    end
 end

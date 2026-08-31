@@ -1156,6 +1156,61 @@ end
     end
 end
 
+@testset "Random oligomers" begin
+    @testset "Types and lengths" begin
+        for T in (
+                    DNAOligomer{UInt8},
+                    RNAOligomer{UInt32},
+                    Oligomer{DNAAlphabet{4}, UInt64},
+                    Oligomer{RNAAlphabet{4}, UInt64},
+                    AAOligomer{UInt128},
+                ), len in (0, capacity(T))
+            oligomer = @inferred rand(StableRNG(SEED), T, len)
+            @test typeof(oligomer) === T
+            @test length(oligomer) == len
+        end
+
+        @test typeof(rand(DNAOligomer{UInt16}, 3)) === DNAOligomer{UInt16}
+        @test_throws ArgumentError rand(StableRNG(SEED), DNAOligomer{UInt8}, -1)
+        @test_throws ArgumentError rand(
+            StableRNG(SEED), DNAOligomer{UInt8}, capacity(DNAOligomer{UInt8}) + 1
+        )
+    end
+
+    @testset "Alphabet sampling" begin
+        dna4 = rand(StableRNG(SEED), Oligomer{DNAAlphabet{4}, UInt128}, 20)
+        @test all(i -> i in dna"ACGT", dna4)
+
+        amino_acids = rand(StableRNG(SEED), AAOligomer{UInt128}, 15)
+        @test all(i -> i in aa"ACDEFGHIKLMNPQRSTVWY", amino_acids)
+    end
+
+    @testset "Packed sampling" begin
+        for T in (DNAOligomer{UInt64}, RNAOligomer{UInt64})
+            rng = StableRNG(SEED)
+            control = StableRNG(SEED)
+            rand(rng, T, capacity(T))
+            rand(control, UInt)
+            @test rand(rng, UInt) == rand(control, UInt)
+        end
+
+        rng = StableRNG(SEED)
+        control = StableRNG(SEED)
+        T = Oligomer{DNAAlphabet{4}, UInt128}
+        rand(rng, T, 20)
+        rand(control, UInt)
+        rand(control, UInt)
+        @test rand(rng, UInt) == rand(control, UInt)
+    end
+
+    @testset "Instances" begin
+        oligomer = DNAOligomer{UInt16}("TAGC")
+        @test rand(StableRNG(SEED), oligomer) in oligomer
+        @test typeof(@inferred(rand(StableRNG(SEED), oligomer))) === eltype(oligomer)
+        @test_throws ArgumentError rand(StableRNG(SEED), empty(typeof(oligomer)))
+    end
+end
+
 @testset "Counting" begin
     @testset "Count GC" begin
         @test count(isGC, mer"TATCGGAGA"d) == 4

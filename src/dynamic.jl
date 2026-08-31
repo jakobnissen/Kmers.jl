@@ -106,6 +106,7 @@ end
 
 """
     capacity(T::Type{<:Oligomer{A, U}})::Int
+    capacity(x::Oligomer)::Int
 
 Compute the maximum number of symbols that an instance of the concrete
 type `T` can contain.
@@ -147,6 +148,8 @@ Base.@constprop :aggressive Base.@assume_effects :foldable function capacity(
         div(max_coding_bits(T), bps)
     end
 end
+
+@inline capacity(x::Oligomer) = capacity(typeof(x))
 
 BioSequences.encoded_data_eltype(::Type{Oligomer{A, U}}) where {A, U} = U
 

@@ -14,6 +14,9 @@ using BioSequences:
 
 using Kmers:
     Kmer,
+    Oligomer,
+    capacity,
+    from_integer,
     get_mask,
     ksize,
     unsafe,
@@ -22,7 +25,9 @@ using Kmers:
     shift_encoding,
     FourBit,
     n_coding_elements,
-    derive_type
+    derive_type,
+    left_shift,
+    _new_dynamic_kmer
 
 # TODO: Add back this AA sampler and the fourbit function to BioSequences.jl
 const PROTEOGENIC_AA_ENCODINGS = let
@@ -43,6 +48,68 @@ function Random.rand(rng::AbstractRNG, s::SamplerTrivial{T}) where {T <: Kmer}
     return @inbounds kmer[rand(rng, 1:length(kmer))]
 end
 
+function Random.rand(rng::AbstractRNG, s::SamplerTrivial{T}) where {T <: Oligomer}
+    oligomer = s[]
+    isempty(oligomer) && throw(ArgumentError("collection must be non-empty"))
+    return @inbounds oligomer[rand(rng, 1:length(oligomer))]
+end
+
+function Random.rand(rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::Integer) where {A, U}
+    # This branch here is crucial to keep, because downstream functions assume no zero-length oligos.
+    # These require special handling elsewhere, e.g. in shift_to.
+    iszero(len) && return _new_dynamic_kmer(A, zero(U))
+    1 <= len <= capacity(T) || throw(ArgumentError("length must be in the 0:capacity(T)"))
+    return random_oligomer(rng, T, UInt(len)::UInt)
+end
+
+Random.rand(T::Type{<:Oligomer}, len::Integer) = rand(default_rng(), T, len)
+
+@inline function random_oligomer(rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt) where {A <: Alphabet, U}
+    return random_oligomer(rng, T, len, iscomplete(Alphabet(T)))
+end
+
+@inline function random_oligomer(
+        rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt, ::Val{true}
+    ) where {A, U}
+    bits = bits_per_symbol(T) * len
+    u = shift_to(rand(rng, U), bits) | (len % U)
+    return _new_dynamic_kmer(A, u)
+end
+
+# Fallback for generic alphabets
+function random_oligomer(
+        rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt, ::Val{false}
+    ) where {A, U}
+    u = zero(U)
+    bps = bits_per_symbol(T)
+    syms = symbols(A())
+    isempty(syms) && throw(ArgumentError("Alphabet cannot be empty"))
+    for _ in 1:(len % Int)
+        u = left_shift(u, bps) | (encode(A(), rand(rng, syms)) % U)
+    end
+    return _new_dynamic_kmer(A, shift_to(u, len * bps) | (len % U))
+end
+
+@inline function random_oligomer(
+        rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt
+    ) where {A <: FourBit, U}
+    bits = bits_per_symbol(T) * len
+    u = shift_to(random_fourbit_encoding(rng, U), bits) | (len % U)
+    return _new_dynamic_kmer(A, u)
+end
+
+@inline function random_oligomer(
+        rng::AbstractRNG, T::Type{<:Oligomer{AminoAcidAlphabet, U}}, len::UInt
+    ) where {U}
+    u = zero(U)
+    bps = bits_per_symbol(T)
+    for _ in UInt(1):len
+        u |= rand(rng, PROTEOGENIC_AA_ENCODINGS) % U
+        u <<= bps
+    end
+    return _new_dynamic_kmer(AminoAcidAlphabet, shift_to(u, len * bps) | (len % U))
+end
+
 function Random.rand(rng::AbstractRNG, ::SamplerType{T}) where {T <: Kmer}
     Tc = maybe_derive_type(T)
     isconcretetype(Tc) || throw(ArgumentError("Cannot sample from abstract K-mer type"))
@@ -56,8 +123,8 @@ end
 @inline function random_kmer(rng::AbstractRNG, T::Type{<:Kmer{N}}) where {N <: FourBit}
     nce = n_coding_elements(T)
     iszero(nce) && return zero_kmer(T)
-    tail = ntuple(i -> random_fourbit_encoding(rng), nce - 1)
-    head = random_fourbit_encoding(rng) & get_mask(T)
+    tail = ntuple(i -> random_fourbit_encoding(rng, UInt), nce - 1)
+    head = random_fourbit_encoding(rng, UInt) & get_mask(T)
     return T(unsafe, (head, tail...))
 end
 
@@ -100,12 +167,13 @@ end
     return (head, tail...)
 end
 
-function random_fourbit_encoding(rng)
-    enc = 0x1111111111111111 % UInt
-    mask = rand(rng, UInt)
-    enc = ((enc & mask) << 1) | (enc & ~mask)
-    mask >>>= 1
-    return ((enc & mask) << 2) | (enc & ~mask)
+function random_fourbit_encoding(rng::AbstractRNG, ::Type{U}) where {U <: Unsigned}
+    mask = rand(rng, U)
+    enc = div(typemax(U), 0x0f)
+    enc += enc & mask
+    return enc + 0x03 * (enc & (mask >>> 1))
 end
+
+shift_to(u::Unsigned, bits::UInt) = left_shift(u, (8 * sizeof(u)) % UInt - bits)
 
 end # module
