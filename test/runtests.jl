@@ -1209,6 +1209,26 @@ end
         @test typeof(@inferred(rand(StableRNG(SEED), oligomer))) === eltype(oligomer)
         @test_throws ArgumentError rand(StableRNG(SEED), empty(typeof(oligomer)))
     end
+
+    @testset "Shuffle" begin
+        for oligomer in (
+                DNAOligomer{UInt32}("TAGCTAG"),
+                Oligomer{RNAAlphabet{4}, UInt64}("AUGN-U"),
+                AAOligomer{UInt128}("KWOPLVM"),
+            )
+            shuffled = @inferred shuffle(StableRNG(SEED), oligomer)
+            @test typeof(shuffled) === typeof(oligomer)
+            @test length(shuffled) == length(oligomer)
+            @test sort(collect(shuffled)) == sort(collect(oligomer))
+            @test shuffled == shuffle(StableRNG(SEED), oligomer)
+        end
+
+        empty_oligomer = empty(DNAOligomer{UInt8})
+        singleton = DNAOligomer{UInt8}("T")
+        @test @inferred(shuffle(StableRNG(SEED), empty_oligomer)) === empty_oligomer
+        @test @inferred(shuffle(StableRNG(SEED), singleton)) === singleton
+        @test typeof(shuffle(DNAOligomer{UInt16}("TAG"))) === DNAOligomer{UInt16}
+    end
 end
 
 @testset "Counting" begin

@@ -1,6 +1,6 @@
 module RandomExt
 
-using Random: Random, AbstractRNG, rand, default_rng, Sampler, SamplerTrivial, SamplerType
+using Random: Random, AbstractRNG, rand, default_rng, Sampler, SamplerTrivial, SamplerType, shuffle
 
 using BioSequences:
     Alphabet,
@@ -53,6 +53,41 @@ function Random.rand(rng::AbstractRNG, s::SamplerTrivial{T}) where {T <: Oligome
     isempty(oligomer) && throw(ArgumentError("collection must be non-empty"))
     return @inbounds oligomer[rand(rng, 1:length(oligomer))]
 end
+
+"""
+    shuffle([rng::AbstractRNG], oligomer::T)::T where {T <: Oligomer}
+
+Return an `Oligomer` of the same type, length, and symbols as `oligomer`, but
+with the symbols randomly permuted by `rng`, which defaults to `Random.default_rng()`.
+"""
+function Random.shuffle(rng::AbstractRNG, oligomer::Oligomer{A, U}) where {A, U}
+    n = length(oligomer)
+    n < 2 && return oligomer
+
+    bps = bits_per_symbol(A())
+    iszero(bps) && return oligomer
+    symbol_mask = (one(U) << bps) - one(U)
+    u = oligomer.x
+    nbits = 8 * sizeof(U)
+
+    # Fisher-Yates shuffle, operating directly on the packed encodings.
+    for i in 2:n
+        j = rand(rng, 1:i)
+        i == j && continue
+        ishift = nbits - i * bps
+        jshift = nbits - j * bps
+        encoding_a = right_shift(u, ishift)
+        encoding_b = right_shift(u, jshift)
+        # Compute the the xor of the two symbols
+        difference = (encoding_a ⊻ encoding_b) & symbol_mask
+        # Then xor this difference into the positions of i and j.
+        # This switches the symbol at position i to position of symbol j and vice versa
+        u = u ⊻ (left_shift(difference, ishift) | left_shift(difference, jshift))
+    end
+    return _new_dynamic_kmer(A, u)
+end
+
+Random.shuffle(oligomer::Oligomer) = shuffle(default_rng(), oligomer)
 
 function Random.rand(rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::Integer) where {A, U}
     # This branch here is crucial to keep, because downstream functions assume no zero-length oligos.
