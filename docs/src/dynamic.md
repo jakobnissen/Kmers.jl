@@ -54,6 +54,11 @@ Oligomer
 `Oligomer{A, U}` is parameterized by `A`, its `Alphabet`, and `U`, the backing unsigned integer type.
 Thus, an `Oligomer{DNAAlphabet{4}, UInt32}` is 4 bytes in size and contains 4-bit DNA.
 
+For interactive use, `Oligomer{A}(source)` and the `DNAOligomer(source)`,
+`RNAOligomer(source)`, and `AAOligomer(source)` aliases use a fixed `UInt64`
+backing type. This keeps the result type independent of the source's runtime
+length.
+
 The backing integer `U` stores both the sequence data and the runtime length.
 This imposes capacity limits. Use `capacity(T)` to determine the maximum number of symbols for a given type.
 
@@ -98,19 +103,19 @@ Like other `BioSequence` types, they can also be constructed from strings, `Abst
 (interpreted as containing ASCII), and other `BioSequence`s.
 
 ```jldoctest
-julia> DNAOligomer{UInt64}("TAGCAT")  # From string
+julia> DNAOligomer("TAGCAT")  # From string; uses UInt64
 6nt DNAOligomer{UInt64}:
 TAGCAT
 
-julia> RNAOligomer{UInt64}(rna"AUGCUA")  # From BioSequence
+julia> RNAOligomer(rna"AUGCUA")  # From BioSequence
 6nt RNAOligomer{UInt64}:
 AUGCUA
 
-julia> DNAOligomer{UInt64}([DNA_T, DNA_A, DNA_G])  # From iterable
+julia> DNAOligomer([DNA_T, DNA_A, DNA_G])  # From iterable
 3nt DNAOligomer{UInt64}:
 TAG
 
-julia> AAOligomer{UInt64}([0x61, 0x63])  # From ASCII AbstractVector{UInt8}
+julia> AAOligomer([0x61, 0x63])  # From ASCII AbstractVector{UInt8}
 2aa AAOligomer{UInt64}:
 AC
 ```

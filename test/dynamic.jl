@@ -44,6 +44,23 @@ using BitIntegers
         @test string(seq) == string(dm)
     end
 
+    @testset "Default backing constructors" begin
+        for (constructor, source, expected_type) in [
+                (Oligomer{DNAAlphabet{2}}, "TAG", DNAOligomer{UInt64}),
+                (DNAOligomer, "TAG", DNAOligomer{UInt64}),
+                (RNAOligomer, rna"AUG", RNAOligomer{UInt64}),
+                (AAOligomer, "KWOP", AAOligomer{UInt64}),
+                (Oligomer{DNAAlphabet{4}}, "TAGN", Oligomer{DNAAlphabet{4}, UInt64}),
+            ]
+            oligomer = @inferred constructor(source)
+            @test typeof(oligomer) === expected_type
+        end
+
+        narrow = DNAOligomer{UInt8}("TAG")
+        @test @inferred(DNAOligomer(narrow)) === DNAOligomer{UInt64}(narrow)
+        @test @inferred(RNAOligomer(narrow)) === RNAOligomer{UInt64}(narrow)
+    end
+
     @testset "Two to four bit alphabet" begin
         for s in Any[
                 dna"ATGCTGTGACCA",

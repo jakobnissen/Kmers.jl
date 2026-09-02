@@ -56,13 +56,31 @@ Base.empty(::Type{<:Oligomer{A, U}}) where {A, U} = _new_dynamic_kmer(A, zero(U)
 
 utype(::Type{<:Oligomer{A, U}}) where {A, U} = U
 
-"Alias for Oligomer{DNAAlphabet{2}, <:Unsigned}"
+"""
+    DNAOligomer{U}
+    DNAOligomer(source)
+
+Alias for `Oligomer{DNAAlphabet{2}, U}`.
+When called without an explicit backing type, constructs a `DNAOligomer{UInt64}`.
+"""
 const DNAOligomer{U} = (Oligomer{DNAAlphabet{2}, U} where {U <: Unsigned})
 
-"Alias for Oligomer{RNAAlphabet{2}, <:Unsigned}"
+"""
+    RNAOligomer{U}
+    RNAOligomer(source)
+
+Alias for `Oligomer{RNAAlphabet{2}, U}`.
+When called without an explicit backing type, constructs an `RNAOligomer{UInt64}`.
+"""
 const RNAOligomer{U} = (Oligomer{RNAAlphabet{2}, U} where {U <: Unsigned})
 
-"Alias for Oligomer{AminoAcidAlphabet, <:Unsigned}"
+"""
+    AAOligomer{U}
+    AAOligomer(source)
+
+Alias for `Oligomer{AminoAcidAlphabet, U}`.
+When called without an explicit backing type, constructs an `AAOligomer{UInt64}`.
+"""
 const AAOligomer{U} = (Oligomer{AminoAcidAlphabet, U} where {U <: Unsigned})
 
 Base.@constprop :aggressive Base.@assume_effects :foldable function max_coding_bits(
@@ -614,12 +632,18 @@ function Oligomer{T1, U}(x::Oligomer{T2, U}) where {
     return _new_dynamic_kmer(T1, x.x)
 end
 
-function Oligomer{T1}(x::Oligomer{T2}) where {
-        B,
-        T1 <: NucleicAcidAlphabet{B},
-        T2 <: NucleicAcidAlphabet{B},
-    }
-    return _new_dynamic_kmer(T1, x.x)
+"""
+    Oligomer{A}(source)
+    DNAOligomer(source)
+    RNAOligomer(source)
+    AAOligomer(source)
+
+Construct an `Oligomer` with alphabet `A` and a `UInt64` backing integer from `source`.
+To choose another backing type, use `Oligomer{A, U}(source)` or the
+corresponding `*Oligomer{U}` alias.
+"""
+@inline function Oligomer{A}(x) where {A <: Alphabet}
+    return Oligomer{A, UInt64}(x)
 end
 
 # Constructor dispatches to RecodingScheme
