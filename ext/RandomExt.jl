@@ -27,6 +27,7 @@ using Kmers:
     n_coding_elements,
     derive_type,
     left_shift,
+    right_shift,
     _new_dynamic_kmer
 
 # TODO: Add back this AA sampler and the fourbit function to BioSequences.jl
