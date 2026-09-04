@@ -27,12 +27,12 @@ include("translation.jl")
     end
 end
 
-@testset "Oligomer comparison" begin
-    dna8 = DNAOligomer{UInt8}("TAG")
-    dna8_copy = DNAOligomer{UInt8}("TAG")
-    rna8 = RNAOligomer{UInt8}("UAG")
-    dna16 = DNAOligomer{UInt16}("TAG")
-    dna4_16 = Oligomer{DNAAlphabet{4}, UInt16}("TAG")
+@testset "Oligo comparison" begin
+    dna8 = DNAOligo{UInt8}("TAG")
+    dna8_copy = DNAOligo{UInt8}("TAG")
+    rna8 = RNAOligo{UInt8}("UAG")
+    dna16 = DNAOligo{UInt16}("TAG")
+    dna4_16 = Oligo{DNAAlphabet{4}, UInt16}("TAG")
     long = LongDNA{2}("TAG")
     kmer = DNAKmer{3}("TAG")
 
@@ -1061,7 +1061,7 @@ end
         @test isempty(unsafe_extract(Kmers.Copyable(), DNAKmer{0, 0}, empty_source, 1))
 
         # SeqOrView specializations do not replace the generic BioSequence fallback.
-        oligomer_source = DNAOligomer{UInt128}(source_2bit[1:32])
+        oligomer_source = DNAOligo{UInt128}(source_2bit[1:32])
         oligomer_type = DNAKmer{17, 1}
         @test unsafe_extract(Kmers.Copyable(), oligomer_type, oligomer_source, 3) ==
             oligomer_type(oligomer_source[3:19])
@@ -1159,34 +1159,34 @@ end
 @testset "Random oligomers" begin
     @testset "Types and lengths" begin
         for T in (
-                    DNAOligomer{UInt8},
-                    RNAOligomer{UInt32},
-                    Oligomer{DNAAlphabet{4}, UInt64},
-                    Oligomer{RNAAlphabet{4}, UInt64},
-                    AAOligomer{UInt128},
+                    DNAOligo{UInt8},
+                    RNAOligo{UInt32},
+                    Oligo{DNAAlphabet{4}, UInt64},
+                    Oligo{RNAAlphabet{4}, UInt64},
+                    AAOligo{UInt128},
                 ), len in (0, capacity(T))
             oligomer = @inferred rand(StableRNG(SEED), T, len)
             @test typeof(oligomer) === T
             @test length(oligomer) == len
         end
 
-        @test typeof(rand(DNAOligomer{UInt16}, 3)) === DNAOligomer{UInt16}
-        @test_throws ArgumentError rand(StableRNG(SEED), DNAOligomer{UInt8}, -1)
+        @test typeof(rand(DNAOligo{UInt16}, 3)) === DNAOligo{UInt16}
+        @test_throws ArgumentError rand(StableRNG(SEED), DNAOligo{UInt8}, -1)
         @test_throws ArgumentError rand(
-            StableRNG(SEED), DNAOligomer{UInt8}, capacity(DNAOligomer{UInt8}) + 1
+            StableRNG(SEED), DNAOligo{UInt8}, capacity(DNAOligo{UInt8}) + 1
         )
     end
 
     @testset "Alphabet sampling" begin
-        dna4 = rand(StableRNG(SEED), Oligomer{DNAAlphabet{4}, UInt128}, 20)
+        dna4 = rand(StableRNG(SEED), Oligo{DNAAlphabet{4}, UInt128}, 20)
         @test all(i -> i in dna"ACGT", dna4)
 
-        amino_acids = rand(StableRNG(SEED), AAOligomer{UInt128}, 15)
+        amino_acids = rand(StableRNG(SEED), AAOligo{UInt128}, 15)
         @test all(i -> i in aa"ACDEFGHIKLMNPQRSTVWY", amino_acids)
     end
 
     @testset "Packed sampling" begin
-        for T in (DNAOligomer{UInt64}, RNAOligomer{UInt64})
+        for T in (DNAOligo{UInt64}, RNAOligo{UInt64})
             rng = StableRNG(SEED)
             control = StableRNG(SEED)
             rand(rng, T, capacity(T))
@@ -1196,7 +1196,7 @@ end
 
         rng = StableRNG(SEED)
         control = StableRNG(SEED)
-        T = Oligomer{DNAAlphabet{4}, UInt128}
+        T = Oligo{DNAAlphabet{4}, UInt128}
         rand(rng, T, 20)
         rand(control, UInt)
         rand(control, UInt)
@@ -1204,7 +1204,7 @@ end
     end
 
     @testset "Instances" begin
-        oligomer = DNAOligomer{UInt16}("TAGC")
+        oligomer = DNAOligo{UInt16}("TAGC")
         @test rand(StableRNG(SEED), oligomer) in oligomer
         @test typeof(@inferred(rand(StableRNG(SEED), oligomer))) === eltype(oligomer)
         @test_throws ArgumentError rand(StableRNG(SEED), empty(typeof(oligomer)))
@@ -1212,9 +1212,9 @@ end
 
     @testset "Shuffle" begin
         for oligomer in (
-                DNAOligomer{UInt32}("TAGCTAG"),
-                Oligomer{RNAAlphabet{4}, UInt64}("AUGN-U"),
-                AAOligomer{UInt128}("KWOPLVM"),
+                DNAOligo{UInt32}("TAGCTAG"),
+                Oligo{RNAAlphabet{4}, UInt64}("AUGN-U"),
+                AAOligo{UInt128}("KWOPLVM"),
             )
             shuffled = @inferred shuffle(StableRNG(SEED), oligomer)
             @test typeof(shuffled) === typeof(oligomer)
@@ -1223,11 +1223,11 @@ end
             @test shuffled == shuffle(StableRNG(SEED), oligomer)
         end
 
-        empty_oligomer = empty(DNAOligomer{UInt8})
-        singleton = DNAOligomer{UInt8}("T")
+        empty_oligomer = empty(DNAOligo{UInt8})
+        singleton = DNAOligo{UInt8}("T")
         @test @inferred(shuffle(StableRNG(SEED), empty_oligomer)) === empty_oligomer
         @test @inferred(shuffle(StableRNG(SEED), singleton)) === singleton
-        @test typeof(shuffle(DNAOligomer{UInt16}("TAG"))) === DNAOligomer{UInt16}
+        @test typeof(shuffle(DNAOligo{UInt16}("TAG"))) === DNAOligo{UInt16}
     end
 end
 

@@ -14,7 +14,7 @@ using BioSequences:
 
 using Kmers:
     Kmer,
-    Oligomer,
+    Oligo,
     capacity,
     from_integer,
     get_mask,
@@ -49,19 +49,19 @@ function Random.rand(rng::AbstractRNG, s::SamplerTrivial{T}) where {T <: Kmer}
     return @inbounds kmer[rand(rng, 1:length(kmer))]
 end
 
-function Random.rand(rng::AbstractRNG, s::SamplerTrivial{T}) where {T <: Oligomer}
+function Random.rand(rng::AbstractRNG, s::SamplerTrivial{T}) where {T <: Oligo}
     oligomer = s[]
     isempty(oligomer) && throw(ArgumentError("collection must be non-empty"))
     return @inbounds oligomer[rand(rng, 1:length(oligomer))]
 end
 
 """
-    shuffle([rng::AbstractRNG], oligomer::T)::T where {T <: Oligomer}
+    shuffle([rng::AbstractRNG], oligomer::T)::T where {T <: Oligo}
 
-Return an `Oligomer` of the same type, length, and symbols as `oligomer`, but
+Return an `Oligo` of the same type, length, and symbols as `oligomer`, but
 with the symbols randomly permuted by `rng`, which defaults to `Random.default_rng()`.
 """
-function Random.shuffle(rng::AbstractRNG, oligomer::Oligomer{A, U}) where {A, U}
+function Random.shuffle(rng::AbstractRNG, oligomer::Oligo{A, U}) where {A, U}
     n = length(oligomer)
     n < 2 && return oligomer
 
@@ -88,9 +88,9 @@ function Random.shuffle(rng::AbstractRNG, oligomer::Oligomer{A, U}) where {A, U}
     return _new_dynamic_kmer(A, u)
 end
 
-Random.shuffle(oligomer::Oligomer) = shuffle(default_rng(), oligomer)
+Random.shuffle(oligomer::Oligo) = shuffle(default_rng(), oligomer)
 
-function Random.rand(rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::Integer) where {A, U}
+function Random.rand(rng::AbstractRNG, T::Type{<:Oligo{A, U}}, len::Integer) where {A, U}
     # This branch here is crucial to keep, because downstream functions assume no zero-length oligos.
     # These require special handling elsewhere, e.g. in shift_to.
     iszero(len) && return _new_dynamic_kmer(A, zero(U))
@@ -98,14 +98,14 @@ function Random.rand(rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::Integer) 
     return random_oligomer(rng, T, UInt(len)::UInt)
 end
 
-Random.rand(T::Type{<:Oligomer}, len::Integer) = rand(default_rng(), T, len)
+Random.rand(T::Type{<:Oligo}, len::Integer) = rand(default_rng(), T, len)
 
-@inline function random_oligomer(rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt) where {A <: Alphabet, U}
+@inline function random_oligomer(rng::AbstractRNG, T::Type{<:Oligo{A, U}}, len::UInt) where {A <: Alphabet, U}
     return random_oligomer(rng, T, len, iscomplete(Alphabet(T)))
 end
 
 @inline function random_oligomer(
-        rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt, ::Val{true}
+        rng::AbstractRNG, T::Type{<:Oligo{A, U}}, len::UInt, ::Val{true}
     ) where {A, U}
     bits = bits_per_symbol(T) * len
     u = shift_to(rand(rng, U), bits) | (len % U)
@@ -114,7 +114,7 @@ end
 
 # Fallback for generic alphabets
 function random_oligomer(
-        rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt, ::Val{false}
+        rng::AbstractRNG, T::Type{<:Oligo{A, U}}, len::UInt, ::Val{false}
     ) where {A, U}
     u = zero(U)
     bps = bits_per_symbol(T)
@@ -127,7 +127,7 @@ function random_oligomer(
 end
 
 @inline function random_oligomer(
-        rng::AbstractRNG, T::Type{<:Oligomer{A, U}}, len::UInt
+        rng::AbstractRNG, T::Type{<:Oligo{A, U}}, len::UInt
     ) where {A <: FourBit, U}
     bits = bits_per_symbol(T) * len
     u = shift_to(random_fourbit_encoding(rng, U), bits) | (len % U)
@@ -135,7 +135,7 @@ end
 end
 
 @inline function random_oligomer(
-        rng::AbstractRNG, T::Type{<:Oligomer{AminoAcidAlphabet, U}}, len::UInt
+        rng::AbstractRNG, T::Type{<:Oligo{AminoAcidAlphabet, U}}, len::UInt
     ) where {U}
     u = zero(U)
     bps = bits_per_symbol(T)

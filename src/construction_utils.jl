@@ -10,7 +10,7 @@
 ################################################
 
 # Keep recoding of individual symbols in these small helpers so both Kmer and
-# Oligomer construction use exactly the same validation and encoding rules.
+# Oligo construction use exactly the same validation and encoding rules.
 @inline function recode_element(
         ::TwoToFour,
         ::Alphabet,
@@ -88,14 +88,14 @@ end
 
 """
     unsafe_extract(::RecodingScheme, T::Type{<:Kmer}, seq, from::Int) -> T
-    unsafe_extract(::RecodingScheme, T::Type{<:Oligomer}, seq, from::Int, len::Int) -> T
+    unsafe_extract(::RecodingScheme, T::Type{<:Oligo}, seq, from::Int, len::Int) -> T
 
 Extract a `Kmer` of type `T` from `seq` beginning at index `from`, or an
-`Oligomer` containing `len` symbols beginning at that index. This function is
+`Oligo` containing `len` symbols beginning at that index. This function is
 useful to create kmer or kmer-like types.
 
 This function does not do any bounds checking, so the user must know
-that the extracted range is inbounds in `seq`. For `Oligomer`, the user must
+that the extracted range is inbounds in `seq`. For `Oligo`, the user must
 also know that `len` does not exceed [`capacity(T)`](@ref).
 The validity of the data in the `seq` is validated by this function.
 
@@ -107,8 +107,8 @@ julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAKmer{4, 1}, seq, 2)
 DNA 4-mer:
 AGCT
 
-julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAOligomer{UInt16}, seq, 2, 4)
-4nt DNAOligomer{UInt16}:
+julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAOligo{UInt16}, seq, 2, 4)
+4nt DNAOligo{UInt16}:
 AGCT
 ```
 """

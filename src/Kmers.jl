@@ -25,10 +25,10 @@ export Kmer,
     from_integer,
 
     # Dynamic
-    Oligomer,
-    DNAOligomer,
-    RNAOligomer,
-    AAOligomer,
+    Oligo,
+    DNAOligo,
+    RNAOligo,
+    AAOligo,
     @dmer_str,
 
     # Immutable operations

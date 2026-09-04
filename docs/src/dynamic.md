@@ -13,15 +13,15 @@ end
 
 ```jldoctest
 julia> d = dmer"TAGCAT"d  # Create DNA kmer from string literal
-6nt DNAOligomer{UInt64}:
+6nt DNAOligo{UInt64}:
 TAGCAT
 
 julia> reverse_complement(d)
-6nt DNAOligomer{UInt64}:
+6nt DNAOligo{UInt64}:
 ATGCTA
 
 julia> push(d, DNA_G)  # Returns new instance (immutable)
-7nt DNAOligomer{UInt64}:
+7nt DNAOligo{UInt64}:
 TAGCATG
 ```
 
@@ -32,30 +32,30 @@ An example could be representing primers, which can be of length 18-24.
 Here, using the `Kmer` type would cause code to specialize on each kmer length.
 Besides causing both excessive compilation and code generation, it will also be slow at runtime, as code using these kmers of mixed length will be type unstable.
 
-To solve this, Kmers.jl includes the `Oligomer` type.
+To solve this, Kmers.jl includes the `Oligo` type.
 This type is an immutable, bitstype biosequence, similar to the `Kmer` type, but with the length stored as a runtime value rather than a compile-time type parameter.
 
 ```@docs
-Oligomer
+Oligo
 ```
 
 ### Basic Properties
 
-`Oligomer` has several important characteristics:
+`Oligo` has several important characteristics:
 
 * **Immutable**: All operations return new instances. There is no `push!`, only `push`.
 * **Bitstype**: Stored inline in a single unsigned integer.
 * **Runtime length**: Unlike `Kmer`, the length is not part of the type, avoiding type instability for variable-length workloads.
-* **Size limits**: Each `Oligomer` type has a maximum capacity determined by its alphabet and backing integer type.
+* **Size limits**: Each `Oligo` type has a maximum capacity determined by its alphabet and backing integer type.
 * **Performance**: Slightly slower than `Kmer` but much faster than `LongSequence` for small sequences.
 
 ### Type Parameters
 
-`Oligomer{A, U}` is parameterized by `A`, its `Alphabet`, and `U`, the backing unsigned integer type.
-Thus, an `Oligomer{DNAAlphabet{4}, UInt32}` is 4 bytes in size and contains 4-bit DNA.
+`Oligo{A, U}` is parameterized by `A`, its `Alphabet`, and `U`, the backing unsigned integer type.
+Thus, an `Oligo{DNAAlphabet{4}, UInt32}` is 4 bytes in size and contains 4-bit DNA.
 
-For interactive use, `Oligomer{A}(source)` and the `DNAOligomer(source)`,
-`RNAOligomer(source)`, and `AAOligomer(source)` aliases use a fixed `UInt64`
+For interactive use, `Oligo{A}(source)` and the `DNAOligo(source)`,
+`RNAOligo(source)`, and `AAOligo(source)` aliases use a fixed `UInt64`
 backing type. This keeps the result type independent of the source's runtime
 length.
 
@@ -69,9 +69,9 @@ capacity
 For convenience, type aliases are provided:
 
 ```@docs
-DNAOligomer
-RNAOligomer
-AAOligomer
+DNAOligo
+RNAOligo
+AAOligo
 ```
 
 ### Capacity and Size Limits
@@ -80,10 +80,10 @@ The maximum number of symbols depends on both the alphabet and the backing integ
 
 | Type | Capacity | Bits per symbol | Notes |
 |------|----------|-----------------|-------|
-| `DNAOligomer{UInt32}` | 14 | 2 | Good for short primers |
-| `DNAOligomer{UInt64}` | 29 | 2 | Standard choice for DNA/RNA |
-| `RNAOligomer{UInt64}` | 29 | 2 | Same capacity as DNA |
-| `AAOligomer{UInt128}` | 15 | 8 | Limited by bytes per symbol |
+| `DNAOligo{UInt32}` | 14 | 2 | Good for short primers |
+| `DNAOligo{UInt64}` | 29 | 2 | Standard choice for DNA/RNA |
+| `RNAOligo{UInt64}` | 29 | 2 | Same capacity as DNA |
+| `AAOligo{UInt128}` | 15 | 8 | Limited by bytes per symbol |
 
 Choose a larger backing integer for longer sequences, but be aware that integers larger than 64 bits
 typically become slower as they get larger.
@@ -103,20 +103,20 @@ Like other `BioSequence` types, they can also be constructed from strings, `Abst
 (interpreted as containing ASCII), and other `BioSequence`s.
 
 ```jldoctest
-julia> DNAOligomer("TAGCAT")  # From string; uses UInt64
-6nt DNAOligomer{UInt64}:
+julia> DNAOligo("TAGCAT")  # From string; uses UInt64
+6nt DNAOligo{UInt64}:
 TAGCAT
 
-julia> RNAOligomer(rna"AUGCUA")  # From BioSequence
-6nt RNAOligomer{UInt64}:
+julia> RNAOligo(rna"AUGCUA")  # From BioSequence
+6nt RNAOligo{UInt64}:
 AUGCUA
 
-julia> DNAOligomer([DNA_T, DNA_A, DNA_G])  # From iterable
-3nt DNAOligomer{UInt64}:
+julia> DNAOligo([DNA_T, DNA_A, DNA_G])  # From iterable
+3nt DNAOligo{UInt64}:
 TAG
 
-julia> AAOligomer([0x61, 0x63])  # From ASCII AbstractVector{UInt8}
-2aa AAOligomer{UInt64}:
+julia> AAOligo([0x61, 0x63])  # From ASCII AbstractVector{UInt8}
+2aa AAOligo{UInt64}:
 AC
 ```
 
@@ -129,8 +129,8 @@ checked during recoding.
 ```jldoctest
 julia> source = codeunits("CCTAGCAA");
 
-julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAOligomer{UInt32}, source, 3, 4)
-4nt DNAOligomer{UInt32}:
+julia> Kmers.unsafe_extract(Kmers.AsciiEncode(), DNAOligo{UInt32}, source, 3, 4)
+4nt DNAOligo{UInt32}:
 TAGC
 ```
 
@@ -142,44 +142,44 @@ Dynamic kmers behave similarly to other biosequences, supporting biological tran
 
 ```jldoctest
 julia> d = dmer"TAGCAT"d
-6nt DNAOligomer{UInt64}:
+6nt DNAOligo{UInt64}:
 TAGCAT
 
 julia> reverse_complement(d)
-6nt DNAOligomer{UInt64}:
+6nt DNAOligo{UInt64}:
 ATGCTA
 
 julia> canonical(d)
-6nt DNAOligomer{UInt64}:
+6nt DNAOligo{UInt64}:
 ATGCTA
 ```
 
 #### Modifying Length
 
-All operations return new instances since `Oligomer` is immutable.
+All operations return new instances since `Oligo` is immutable.
 They use, e.g., `pop` instead of `pop!`.
 Instead of `popfirst!` and `pushfirst!`, use `pop_first` and `push_first`
 (note the underscore):
 
 ```jldoctest
 julia> d = dmer"TAG"d
-3nt DNAOligomer{UInt64}:
+3nt DNAOligo{UInt64}:
 TAG
 
 julia> push(d, DNA_C)  # Add to end
-4nt DNAOligomer{UInt64}:
+4nt DNAOligo{UInt64}:
 TAGC
 
 julia> push_first(d, DNA_C)  # Add to beginning
-4nt DNAOligomer{UInt64}:
+4nt DNAOligo{UInt64}:
 CTAG
 
 julia> shift(d, RNA_U)  # Append while discarding the first symbol
-3nt DNAOligomer{UInt64}:
+3nt DNAOligo{UInt64}:
 AGT
 
 julia> shift_first(d, RNA_U)  # Prepend while discarding the last symbol
-3nt DNAOligomer{UInt64}:
+3nt DNAOligo{UInt64}:
 TTA
 ```
 
@@ -189,44 +189,44 @@ Use `Base.setindex` to create a new kmer with a given `BioSymbol` replaced.
 
 ```jldoctest
 julia> d = dmer"TAGCAT"d
-6nt DNAOligomer{UInt64}:
+6nt DNAOligo{UInt64}:
 TAGCAT
 
 julia> d[2:4]
-3nt DNAOligomer{UInt64}:
+3nt DNAOligo{UInt64}:
 AGC
 
 julia> d[[6, 2, 2, 1]]
-4nt DNAOligomer{UInt64}:
+4nt DNAOligo{UInt64}:
 TAAT
 
 julia> d[[true, false, true, false, false, true]]
-3nt DNAOligomer{UInt64}:
+3nt DNAOligo{UInt64}:
 TGT
 
 julia> Base.setindex(d, 'G', 2)  # Immutable, returns new kmer
-6nt DNAOligomer{UInt64}:
+6nt DNAOligo{UInt64}:
 TGGCAT
 ```
 
 #### Integer Conversion
-Like `Kmer`s, `Oligomer` can be converted to and from integers.
+Like `Kmer`s, `Oligo` can be converted to and from integers.
 Unlike the `Kmer` method, length is required when using `from_integer`. The input
 may have a different unsigned integer width from the result's backing type; only
 the low coding bits are used:
 
 ```@docs
-as_integer(::Oligomer)
-from_integer(T::Type{Oligomer{A, U}}, x::Unsigned, len::Int) where {A <: Alphabet, U <: Unsigned}
+as_integer(::Oligo)
+from_integer(T::Type{Oligo{A, U}}, x::Unsigned, len::Int) where {A <: Alphabet, U <: Unsigned}
 ```
 
 ```jldoctest
-julia> original = DNAOligomer{UInt32}("TAGC");
+julia> original = DNAOligo{UInt32}("TAGC");
 
 julia> encoded = UInt128(as_integer(original));
 
-julia> from_integer(DNAOligomer{UInt64}, encoded, length(original))
-4nt DNAOligomer{UInt64}:
+julia> from_integer(DNAOligo{UInt64}, encoded, length(original))
+4nt DNAOligo{UInt64}:
 TAGC
 ```
 
@@ -238,27 +238,27 @@ Dynamic kmers can be converted between different backing integer types. Comparis
 require matching backing types, so widen the smaller value before comparing:
 
 ```jldoctest
-julia> d32 = DNAOligomer{UInt32}("TAGC")
-4nt DNAOligomer{UInt32}:
+julia> d32 = DNAOligo{UInt32}("TAGC")
+4nt DNAOligo{UInt32}:
 TAGC
 
-julia> d64 = DNAOligomer{UInt64}(d32)  # Widen to larger type
-4nt DNAOligomer{UInt64}:
+julia> d64 = DNAOligo{UInt64}(d32)  # Widen to larger type
+4nt DNAOligo{UInt64}:
 TAGC
 
-julia> d64 == DNAOligomer{UInt64}("TAGC")
+julia> d64 == DNAOligo{UInt64}("TAGC")
 true
 ```
 
 #### Comparison Compatibility
 
-Equality, ordering, and `cmp` are defined for `Oligomer`s with the same backing
+Equality, ordering, and `cmp` are defined for `Oligo`s with the same backing
 integer type and either the same alphabet or compatible DNA/RNA alphabets of the
 same bit width. Compatible DNA and RNA values compare by their shared encoding and
 equal values have equal hashes:
 
 ```jldoctest
-julia> dna = DNAOligomer{UInt32}("TAGC"); rna = RNAOligomer{UInt32}("UAGC");
+julia> dna = DNAOligo{UInt32}("TAGC"); rna = RNAOligo{UInt32}("UAGC");
 
 julia> dna == rna
 true
@@ -268,28 +268,28 @@ true
 ```
 
 Comparing different backing widths, different bits-per-symbol encodings, or an
-`Oligomer` with another `BioSequence` type throws a `MethodError`. Convert both
-values to a common `Oligomer` type first.
+`Oligo` with another `BioSequence` type throws a `MethodError`. Convert both
+values to a common `Oligo` type first.
 
 #### Translating Dynamic Kmers
 
-Dynamic kmers can be translated to obtain `AAOligomer{U}` with various integer types `U`.
+Dynamic kmers can be translated to obtain `AAOligo{U}` with various integer types `U`.
 The type of `U` is chosen depending on the input type to ensure that the result will fit in
 the output type.
 
-By default, the largest `AAOligomer` type is `AAOligomer{UInt128}`. However, if the package
+By default, the largest `AAOligo` type is `AAOligo{UInt128}`. However, if the package
 BitIntegers.jl is loaded, Kmers.jl will make use of larger integer sizes,
 currently up to `UInt1024`.
 
 ```@docs
-BioSequences.translate(::Oligomer{<:Union{DNAAlphabet, RNAAlphabet}})
+BioSequences.translate(::Oligo{<:Union{DNAAlphabet, RNAAlphabet}})
 ```
 
 ### Intentional Differences from `Kmer`
 
-The following `Kmer` facilities are intentionally not generalized to `Oligomer`:
+The following `Kmer` facilities are intentionally not generalized to `Oligo`:
 
-* Kmers.jl does not provide `Oligomer`-specific sequence iterators. The existing
-  iterator types produce fixed-length `Kmer`s. However, construction of `Oligomer`
-  from `Kmer` is cheap, so to construct sliding window `Oligomer`, you can do
-  something like `(DNAOligomer{UInt32}(i) for i in FwDNAMers{3}("TAGTGCA"))`.
+* Kmers.jl does not provide `Oligo`-specific sequence iterators. The existing
+  iterator types produce fixed-length `Kmer`s. However, construction of `Oligo`
+  from `Kmer` is cheap, so to construct sliding window `Oligo`, you can do
+  something like `(DNAOligo{UInt32}(i) for i in FwDNAMers{3}("TAGTGCA"))`.

@@ -1,12 +1,12 @@
 # AGENTS.md
-Kmers.jl provides the `Kmer` and `Oligomer` types for efficient k-mer representation in bioinformatics. This is a BioJulia package that is tightly coupled to BioSequences.jl and relies heavily on its internals.
+Kmers.jl provides the `Kmer` and `Oligo` types for efficient k-mer representation in bioinformatics. This is a BioJulia package that is tightly coupled to BioSequences.jl and relies heavily on its internals.
 
 ## Types
 * `Kmer{A, K, N}` is an immutable bitstype with `Alphabet` `A`, length K backed by an `NTuple{N, UInt}`. `N` is derived from A and K and is not a free parameter.
   Individual biosymbols (e.g. DNA monomers) are encoded to `UInt`, and then packed from first to last integer of the tuple. Within an integer, they use the lower bits, and are packed from upper to higher bits.
   E.g. a sequence of 16-bit elements "ABCDEFG" would pack as `( ABC, DEFG)`, with the top 16 bits of the first integer being zerod out.
 
-* `Oligomer{A, U}` is an immutable bitstype with `Alphabet` `A`, stored in a single unsigned integer of type `U`. The integer encodes its sequence and its length, which is dynamic at runtime. Used to avoid type-instability compared to using `Kmer` when operating on small sequences of varying length.
+* `Oligo{A, U}` is an immutable bitstype with `Alphabet` `A`, stored in a single unsigned integer of type `U`. The integer encodes its sequence and its length, which is dynamic at runtime. Used to avoid type-instability compared to using `Kmer` when operating on small sequences of varying length.
   Lower bits of the `U` stores the length, the upper bits from top to bottom stores the symbols. Example: `TG` in a `UInt8` would be stored as `0b11_10_00_10`, i.e. T, then G, then unused bits, then the length.
 
 ## Coding guidelines
@@ -25,7 +25,7 @@ Kmers.jl provides the `Kmer` and `Oligomer` types for efficient k-mer representa
 * This package may assume a little-endian 64-bit CPU, and refuse to compile on other platforms.
 
 ### RecodingScheme Dispatch
-Construction of both Kmer and Oligomer uses a `RecodingScheme` abstraction to handle different input types efficiently:
+Construction of both Kmer and Oligo uses a `RecodingScheme` abstraction to handle different input types efficiently:
 
 - **`Copyable`**: Direct copy of encoding from compatible BioSequences (same or compatible alphabet)
 - **`AsciiEncode`**: Efficient ASCII string parsing for DNA/RNA/AA sequences
